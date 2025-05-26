@@ -1,3 +1,27 @@
-# Godot 4+ specific ignores
+# Godot generated files
 .godot/
-/android/
+*.godot.iml
+export_presets.cfg
+
+# User-specific files
+.vscode/
+
+# Temporary files
+*.tmp
+*.uid
+*.import
+*.lnk
+
+# Data directories
+data/config/*
+data/screenshots/*
+
+# Git files (exclude the ignore file itself and attributes)
+.gitignore
+.gitattributes
+.editorconfig
+
+# Godot-specific temporary files (often created during scene editing)
+*.tscn.*
+*.scn.*
+*.escn.*
