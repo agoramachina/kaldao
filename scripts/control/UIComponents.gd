@@ -39,15 +39,15 @@ func setup_ui():
 	# Connect window resize signal
 	control_node.get_viewport().connect("size_changed", on_window_resized)
 
+
 func setup_canvas_sizing():
-	# Make canvas fill the entire control/window
-	canvas.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# Force canvas to resize with window
+	# Make canvas fill most of the window, but leave space for timeline
 	canvas.anchor_left = 0.0
 	canvas.anchor_top = 0.0
 	canvas.anchor_right = 1.0
 	canvas.anchor_bottom = 1.0
+	canvas.offset_bottom = -120  # Leave 120 pixels at bottom for timeline
+	canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 func setup_label_styling():
 	# Disable BBCode for cleaner display
@@ -76,7 +76,7 @@ func position_labels():
 	
 	# FIXED SIZES for UI elements (no scaling)
 	var column_width = 350  # Fixed width - won't scale with window
-	var column_height = 600  # Fixed height - won't scale with window
+	var column_height = viewport_size.y
 	
 	# Position settings label (left column) - FIXED SIZE
 	settings_label.position = Vector2(0, 0)
@@ -84,15 +84,17 @@ func position_labels():
 	
 	# Position commands label (right column) - FIXED SIZE, positioned from right edge
 	commands_label.position = Vector2(viewport_size.x - column_width, 0)
-	commands_label.size = Vector2(column_width, column_height)
+	commands_label.size = Vector2(column_width, viewport_size.y)
 	
 	# Position main label (TOP LEFT for parameter updates) - FIXED SIZE
 	var main_width = 600   # Fixed width
-	var main_height = 120  # Fixed height
-	main_label.position = Vector2(10, 10)
-	main_label.size = Vector2(main_width, main_height)
+	var main_height = viewport_size.y  
+	main_label.position = Vector2(0, 10)
+	main_label.size = Vector2(main_width, viewport_size.y)
 	
 	print("DEBUG: UI positioned with fixed sizes - Window: ", viewport_size, " UI: ", column_width, "x", column_height)
+	
+	var effective_height = viewport_size.y - 80  # Timeline height + margin
 
 func create_backgrounds():
 	# Create background for settings label
@@ -139,8 +141,8 @@ func update_main_background_to_content():
 		var content_height = main_label.get_content_height()
 		var padding = 10
 		
-		main_background.position = Vector2(main_label.position.x - padding, main_label.position.y - padding)
-		main_background.size = Vector2(main_label.size.x + padding * 2, content_height + padding * 2)
+		main_background.position = Vector2(main_label.position.x - padding, main_label.position.y)
+		main_background.size = Vector2(main_label.size.x + padding * 2, content_height)
 		main_background.visible = main_label.visible
 
 func on_window_resized():

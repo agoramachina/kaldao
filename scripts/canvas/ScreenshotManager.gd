@@ -22,8 +22,8 @@ func _take_screenshot(viewport: Viewport):
 		time_dict.hour, time_dict.minute, time_dict.second
 	]
 	
-	# Save to user directory
-	var file_path = "user://" + filename
+	# Save to project screenshots directory
+	var file_path = "res://data/screenshots/" + filename
 	var error = img.save_png(file_path)
 	
 	if error == OK:

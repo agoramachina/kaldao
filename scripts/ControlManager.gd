@@ -17,22 +17,9 @@ var parameter_display_active = false  # Track if parameter display is currently 
 var fade_timer: Timer  # Timer for the fade delay
 
 func _ready():
-	# Force window and control size FIRST
-	print("DEBUG: Setting up window size...")
 	
 	# Set the window size
-	get_window().size = Vector2i(1900, 1200)
 	print("DEBUG: Window size set to: ", get_window().size)
-	
-	# Set the control node size to match
-	size = Vector2(1900, 1200)
-	position = Vector2.ZERO
-	print("DEBUG: Control size set to: ", size)
-	print("DEBUG: Control position set to: ", position)
-	
-	# Force the canvas (ColorRect) to match
-	canvas.size = Vector2(1900, 1200)
-	canvas.position = Vector2.ZERO
 	print("DEBUG: Canvas size set to: ", canvas.size)
 	
 	# Initialize component managers
@@ -62,6 +49,16 @@ func _ready():
 	var backgrounds = ui_components.get_backgrounds()
 	menu_manager.set_backgrounds(backgrounds[0], backgrounds[1], backgrounds[2])
 	
+	# Add timeline component
+	var timeline_component = TimelineComponent.new()
+	add_child(timeline_component)  # Add to main Control node
+	timeline_component.connect_managers(canvas.audio_manager, canvas.song_settings)
+	timeline_component.z_index = 1000
+	
+	# Connect timeline signals
+	timeline_component.seek_requested.connect(canvas.on_timeline_seek)
+	timeline_component.play_pause_requested.connect(canvas.toggle_audio_playback)
+	
 	# Connect input handler signals
 	connect_input_signals()
 
@@ -76,7 +73,6 @@ func _on_window_resized():
 
 func connect_input_signals():
 	input_handler.menu_toggle_requested.connect(toggle_settings_menu)
-	input_handler.menu_hide_requested.connect(hide_settings_menu)
 	input_handler.parameter_increase_requested.connect(on_parameter_increase)
 	input_handler.parameter_decrease_requested.connect(on_parameter_decrease)
 	input_handler.parameter_next_requested.connect(on_parameter_next)
@@ -86,14 +82,15 @@ func connect_input_signals():
 	input_handler.randomize_parameters_requested.connect(canvas.randomize_parameters)
 	input_handler.colors_randomize_requested.connect(canvas.randomize_colors)
 	input_handler.colors_reset_bw_requested.connect(canvas.reset_colors_to_bw)
-	input_handler.audio_toggle_requested.connect(canvas.toggle_audio_reactive)
-	input_handler.audio_device_cycle_requested.connect(canvas.cycle_audio_device)
-	input_handler.audio_output_cycle_requested.connect(canvas.cycle_output_device)  # New connection
-	input_handler.audio_processing_toggle_requested.connect(canvas.toggle_audio_processing)  # New connection
+	input_handler.audio_playback_toggle_requested.connect(canvas.toggle_audio_playback)
+	input_handler.audio_reactive_toggle_requested.connect(canvas.toggle_audio_reactive)
 	input_handler.pause_toggle_requested.connect(canvas.toggle_pause)
 	input_handler.screenshot_requested.connect(canvas.take_screenshot)
 	input_handler.save_settings_requested.connect(canvas.save_settings)
 	input_handler.load_settings_requested.connect(canvas.load_settings)
+	input_handler.import_labels_requested.connect(canvas.import_labels)
+	input_handler.jump_to_previous_checkpoint_requested.connect(canvas.jump_to_previous_checkpoint)
+	input_handler.jump_to_next_checkpoint_requested.connect(canvas.jump_to_next_checkpoint)
 
 func on_parameter_next():
 	# Clear any existing parameter display immediately
@@ -225,7 +222,6 @@ func hide_settings_menu():
 	if fade_elements.size() == 0:
 		# Nothing to fade, just hide instantly
 		menu_manager.hide_settings_menu_instant()
-		canvas.update_parameter_display()
 		return
 	
 	# Create fade-out tween
@@ -241,7 +237,6 @@ func hide_settings_menu():
 	# Wait for fade to complete, then hide everything
 	await tween.finished
 	menu_manager.complete_fade_out()
-	canvas.update_parameter_display()
 
 func on_text_update(text):
 	# Prevent multiple parameter displays from running simultaneously

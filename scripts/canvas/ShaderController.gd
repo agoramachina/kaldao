@@ -3,6 +3,9 @@ class_name ShaderController
 
 var shader_material: ShaderMaterial
 
+# Debug spam filter - don't print debug for these frequently-updated parameters
+var filtered_debug_params = ["camera_position", "rotation_time", "plane_rotation_time", "color_time"]
+
 func _init(material: ShaderMaterial = null):
 	if material:
 		shader_material = material
@@ -16,7 +19,7 @@ func update_parameter(param_name: String, value: float):
 		print("DEBUG: ERROR - No shader_material available!")
 		return
 	
-	# Special debug for speed parameters
+	# Special debug for speed parameters (but filter out accumulated time params)
 	if param_name in ["fly_speed", "rotation_speed", "color_speed", "plane_rotation_speed"]:
 		var old_shader_value = shader_material.get_shader_parameter(param_name)
 	
@@ -26,9 +29,9 @@ func update_parameter(param_name: String, value: float):
 	# Verify it was set correctly
 	var verified_value = shader_material.get_shader_parameter(param_name)
 	
-	# Debug output on control change
-	if not param_name in ["camera_position", "rotation_time", "plane_rotation_time", "color_time"]:
-		print("DEBUG: ShaderController.update_parameter called with: ", param_name, " = ", value)
+	# FILTERED DEBUG OUTPUT - only print for control changes, not time accumulation
+	if not param_name in filtered_debug_params:
+		print("DEBUG: ShaderController.update_parameter: ", param_name, " = ", value)
 
 func update_all_parameters(parameters: Dictionary):
 	if not shader_material:
@@ -51,3 +54,5 @@ func update_color_palette(palette_data: Dictionary, use_palette: bool):
 	shader_material.set_shader_parameter("palette_b", palette_data["b"])
 	shader_material.set_shader_parameter("palette_c", palette_data["c"])
 	shader_material.set_shader_parameter("palette_d", palette_data["d"])
+	
+	print("DEBUG: Updated color palette: ", palette_data["name"] if "name" in palette_data else "Custom")

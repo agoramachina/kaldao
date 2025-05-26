@@ -1,25 +1,3 @@
-[gd_resource type="AudioBusLayout" load_steps=4 format=3 uid="uid://bhp62j8bnimb3"]
-
-[sub_resource type="AudioEffectRecord" id="AudioEffectRecord_g28q7"]
-resource_name = "Record"
-
-[sub_resource type="AudioEffectSpectrumAnalyzer" id="AudioEffectSpectrumAnalyzer_j3pel"]
-resource_name = "SpectrumAnalyzer"
-
-[sub_resource type="AudioEffectRecord" id="AudioEffectRecord_j3pel"]
-resource_name = "Record"
+[gd_resource type="AudioBusLayout" format=3 uid="uid://nc02kx1l4gnl"]
 
 [resource]
-bus/0/mute = true
-bus/0/effect/0/effect = SubResource("AudioEffectRecord_g28q7")
-bus/0/effect/0/enabled = true
-bus/0/effect/1/effect = SubResource("AudioEffectSpectrumAnalyzer_j3pel")
-bus/0/effect/1/enabled = true
-bus/1/name = &"Record"
-bus/1/solo = false
-bus/1/mute = true
-bus/1/bypass_fx = false
-bus/1/volume_db = 0.0
-bus/1/send = &"Master"
-bus/1/effect/0/effect = SubResource("AudioEffectRecord_j3pel")
-bus/1/effect/0/enabled = true

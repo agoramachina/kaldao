@@ -1,3 +1,5 @@
+# Enhanced ParameterManager.gd with kaleidoscope segment protection
+
 extends RefCounted
 class_name ParameterManager
 
@@ -6,9 +8,9 @@ signal parameter_changed(param_name: String, value: float)
 
 # Parameters data
 var parameters = {
-	"fly_speed": {"min": -3.0, "max": 3.0, "current": 0.25, "step": 0.25, "description": "Fly Speed"},
+	"fly_speed": {"min": -3.0, "max": 3.0, "current": 0.2, "step": 0.1, "description": "Fly Speed"},
 	"contrast": {"min": 0.1, "max": 5.0, "current": 1.0, "step": 0.1, "description": "Contrast"},
-	"kaleidoscope_segments": {"min": -300.0, "max": 300.0, "current": 10.0, "step": 2.0, "description": "Kaleidoscope Segments"},
+	"kaleidoscope_segments": {"min": 4.0, "max": 80.0, "current": 10.0, "step": 2.0, "description": "Kaleidoscope Segments"},
 	"truchet_radius": {"min": -1.0, "max": 1.0, "current": 0.35, "step": 0.01, "description": "Truchet Radius"},
 	"rotation_speed": {"min": -6.0, "max": 6.0, "current": 0.025, "step": 0.01, "description": "Rotation Speed"},
 	"zoom_level": {"min": -5.0, "max": 5.0, "current": 0.3, "step": 0.05, "description": "Zoom Level"},
@@ -23,11 +25,11 @@ var parameters = {
 	"color_palette": {"min": 0, "max": 6, "current": 0, "step": 1, "description": "Color Palette"}
 }
 
-# Default values for resetting
+# Default values for resetting - ENSURE kaleidoscope_segments is even
 var default_values = {
 	"fly_speed": 0.25,
 	"contrast": 1.0,
-	"kaleidoscope_segments": 10.0,
+	"kaleidoscope_segments": 10.0,  # EVEN number
 	"truchet_radius": 0.35,
 	"rotation_speed": 0.025,
 	"zoom_level": 0.3,
@@ -52,11 +54,41 @@ var paused_values = {}
 # List of parameters that control animation speed (these get set to 0 when paused)
 var speed_parameters = ["fly_speed", "rotation_speed", "color_speed", "plane_rotation_speed"]
 
-# NEW: Color-related parameters that should NOT be randomized by the "." key
+# Color-related parameters that should NOT be randomized by the "." key
 var color_parameters = ["color_intensity", "color_speed", "color_palette"]
 
 func _init():
 	param_names = parameters.keys()
+	
+	# FORCE kaleidoscope_segments to be even on initialization
+	fix_kaleidoscope_segments()
+
+func fix_kaleidoscope_segments():
+	"""Ensure kaleidoscope_segments is always a valid even integer"""
+	var current = parameters["kaleidoscope_segments"]["current"]
+	var fixed = ensure_kaleidoscope_even(current)
+	
+	if current != fixed:
+		print("ParameterManager: Fixed kaleidoscope_segments from %.6f to %.6f" % [current, fixed])
+		parameters["kaleidoscope_segments"]["current"] = fixed
+		# Don't emit signal during initialization
+
+func ensure_kaleidoscope_even(value: float) -> float:
+	"""Ensure kaleidoscope segments value is an even integer within valid range"""
+	# Clamp to valid range
+	value = clamp(value, 4.0, 80.0)
+	
+	# Round to nearest integer
+	var rounded = round(value)
+	
+	# If odd, make it even (prefer rounding down for consistency)
+	if int(rounded) % 2 == 1:
+		rounded -= 1.0
+		# If that puts us below minimum, round up instead
+		if rounded < 4.0:
+			rounded = 4.0
+	
+	return rounded
 
 func increase_current_parameter():
 	var param_name = param_names[current_param_index]
@@ -66,7 +98,11 @@ func increase_current_parameter():
 		# Handle color palette cycling in ColorPaletteManager instead
 		return
 	elif param_name == "kaleidoscope_segments":
-		param["current"] = min(param["current"] + 2.0, param["max"])
+		# PROTECTED: Always step by 2 and ensure even values
+		var new_value = param["current"] + 2.0
+		new_value = min(new_value, param["max"])
+		new_value = ensure_kaleidoscope_even(new_value)
+		param["current"] = new_value
 	else:
 		param["current"] = min(param["current"] + param["step"], param["max"])
 	
@@ -80,7 +116,11 @@ func decrease_current_parameter():
 		# Handle color palette cycling in ColorPaletteManager instead
 		return
 	elif param_name == "kaleidoscope_segments":
-		param["current"] = max(param["current"] - 2.0, param["min"])
+		# PROTECTED: Always step by 2 and ensure even values
+		var new_value = param["current"] - 2.0
+		new_value = max(new_value, param["min"])
+		new_value = ensure_kaleidoscope_even(new_value)
+		param["current"] = new_value
 	else:
 		param["current"] = max(param["current"] - param["step"], param["min"])
 	
@@ -97,15 +137,26 @@ func previous_parameter():
 func reset_current_parameter():
 	var param_name = param_names[current_param_index]
 	if param_name in default_values:
-		parameters[param_name]["current"] = default_values[param_name]
-		parameter_changed.emit(param_name, default_values[param_name])
+		var default_val = default_values[param_name]
+		
+		# PROTECTED: Ensure kaleidoscope default is even
+		if param_name == "kaleidoscope_segments":
+			default_val = ensure_kaleidoscope_even(default_val)
+		
+		parameters[param_name]["current"] = default_val
+		parameter_changed.emit(param_name, default_val)
 
 func reset_all_parameters():
 	for param_name in default_values:
-		parameters[param_name]["current"] = default_values[param_name]
-		parameter_changed.emit(param_name, default_values[param_name])
+		var default_val = default_values[param_name]
+		
+		# PROTECTED: Ensure kaleidoscope default is even
+		if param_name == "kaleidoscope_segments":
+			default_val = ensure_kaleidoscope_even(default_val)
+		
+		parameters[param_name]["current"] = default_val
+		parameter_changed.emit(param_name, default_val)
 
-# NEW: Randomize all non-color parameters
 func randomize_non_color_parameters():
 	print("DEBUG: Randomizing all non-color parameters...")
 	
@@ -126,9 +177,12 @@ func randomize_non_color_parameters():
 		var random_value: float
 		
 		if param_name == "kaleidoscope_segments":
-			# Special handling for kaleidoscope segments - use integers and step by 2
-			var steps = int((max_val - min_val) / 2.0)
-			random_value = min_val + (randi() % (steps + 1)) * 2.0
+			# PROTECTED: Special handling for kaleidoscope segments - ALWAYS even integers
+			var min_steps = int(min_val / 2.0)  # 2 (for min 4)
+			var max_steps = int(max_val / 2.0)  # 40 (for max 80)
+			var random_steps = randi_range(min_steps, max_steps)
+			random_value = float(random_steps * 2)  # This ensures even values: 4, 6, 8, 10, etc.
+			print("DEBUG: Kaleidoscope segments randomized to steps: %d, value: %.0f" % [random_steps, random_value])
 		else:
 			# Regular parameters - generate random float and snap to step
 			random_value = randf_range(min_val, max_val)
@@ -137,6 +191,10 @@ func randomize_non_color_parameters():
 		
 		# Clamp to ensure it's within bounds
 		random_value = clamp(random_value, min_val, max_val)
+		
+		# Final protection for kaleidoscope_segments
+		if param_name == "kaleidoscope_segments":
+			random_value = ensure_kaleidoscope_even(random_value)
 		
 		# Update the parameter
 		param["current"] = random_value
@@ -156,9 +214,15 @@ func toggle_pause():
 		is_paused = false
 		
 		for param_name in paused_values:
-			parameters[param_name]["current"] = paused_values[param_name]
-			parameter_changed.emit(param_name, paused_values[param_name])
-			print("DEBUG: Restored ", param_name, " to ", paused_values[param_name])
+			var restored_value = paused_values[param_name]
+			
+			# PROTECTED: Ensure kaleidoscope value is even when restoring
+			if param_name == "kaleidoscope_segments":
+				restored_value = ensure_kaleidoscope_even(restored_value)
+			
+			parameters[param_name]["current"] = restored_value
+			parameter_changed.emit(param_name, restored_value)
+			print("DEBUG: Restored ", param_name, " to ", restored_value)
 		
 		paused_values.clear()
 	else:
@@ -240,12 +304,16 @@ func get_parameter_value(param_name: String) -> float:
 
 func set_parameter_value(param_name: String, value: float):
 	if param_name in parameters:
+		# PROTECTED: Special handling for kaleidoscope_segments
+		if param_name == "kaleidoscope_segments":
+			value = ensure_kaleidoscope_even(value)
+			print("ParameterManager: Set kaleidoscope_segments to protected value: %.0f" % value)
+		
 		parameters[param_name]["current"] = value
 		parameter_changed.emit(param_name, value)
 
 func get_all_parameters() -> Dictionary:
 	return parameters
 
-# Add getter for pause status
 func get_is_paused() -> bool:
 	return is_paused

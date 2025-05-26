@@ -29,31 +29,31 @@ func show_settings_menu(settings_text: String):
 	var commands_text = """=== COMMANDS ===
 
 NAVIGATION:
-↑/↓\tAdjust parameter
-←/→\tSwitch parameter
-r\tReset current
-R\tReset all (confirm)
+↑/↓\t\t\tAdjust parameter
+←/→\t\tSwitch parameter
+r\t\t\tReset current
+R\t\t\tReset all (confirm)
 
 RANDOMIZATION:
-C\tRandomize colors
-.\tRandomize parameters
-Shift+C\tReset to B&W
+C\t\t\tRandomize colors
+.\t\t\tRandomize parameters
+Shift+C\t\tReset to B&W
 
 AUDIO:
-A\tToggle audio reactive
-I\tCycle audio device
+Shift+A\t\tToggle audio playback
+A\t\t\tToggle audio reactive
 
 CAPTURE:
-Space\tPause animation
-P\tTake screenshot
+Space\t\tPause animation
+P\t\t\tTake screenshot
 
 FILES:
-Ctrl+S\tSave settings
-Ctrl+L\tLoad settings
+Ctrl+S\t\tSave settings
+Ctrl+L\t\tLoad settings
 
 MENU:
-F1\tToggle this menu
-ESC\tHide this menu"""
+F1\t\t\tToggle this menu
+ESC\t\t\tHide this menu"""
 	
 	# Update text content
 	settings_label.text = settings_text

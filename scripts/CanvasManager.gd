@@ -9,6 +9,7 @@ var parameter_manager: ParameterManager
 var color_palette_manager: ColorPaletteManager
 var shader_controller: ShaderController
 var screenshot_manager: ScreenshotManager
+var timeline_component: TimelineComponent
 
 # References
 var shader_material: ShaderMaterial
@@ -18,6 +19,8 @@ var camera_position = 0.0  # Current camera position along the path
 var accumulated_rotation = 0.0  # Accumulated rotation angle
 var accumulated_plane_rotation = 0.0  # Accumulated plane rotation angle
 var accumulated_color_time = 0.0  # Accumulated color cycling time
+
+var song_settings: SongSettings
 
 func _ready():
 	# Initialize shader material
@@ -38,6 +41,16 @@ func _ready():
 	anchor_right = 1.0
 	anchor_bottom = 1.0
 	
+	# Load custom song settings
+	song_settings = SongSettings.new()
+	song_settings.connect_managers(parameter_manager, color_palette_manager, audio_manager)
+
+	song_settings.import_audacity_labels("res://assets/Lyrics.txt")
+	# song_settings.import_audacity_labels("res://assets/Beats.txt")
+	
+	song_settings.checkpoint_reached.connect(on_checkpoint_reached)
+	
+	
 	# Connect components
 	connect_components()
 	
@@ -47,13 +60,110 @@ func _ready():
 	# Initial setup
 	shader_controller.update_all_parameters(parameter_manager.get_all_parameters())
 	color_palette_manager.emit_current_palette()
-	update_parameter_display()
+	
+
+
+func import_labels():
+	var success = song_settings.import_audacity_labels("res://assets/Lyrics.txt")
+	if success:
+		update_text.emit("Imported %d checkpoints from labels" % song_settings.checkpoints.size())
+	else:
+		update_text.emit("Failed to import labels")
+		
+func on_checkpoint_reached(timestamp: float, checkpoint_name: String):
+	"""Called when we reach a checkpoint during playback"""
+	show_checkpoint_popup(checkpoint_name)
+		
+func jump_to_previous_checkpoint():
+	if not song_settings or not audio_manager:
+		update_text.emit("Song settings or audio not available")
+		return
+	
+	var current_time = audio_manager.get_playback_position()
+	var target_checkpoint = null
+	
+	# Find the previous checkpoint (before current time)
+	for i in range(song_settings.checkpoints.size() - 1, -1, -1):
+		var checkpoint = song_settings.checkpoints[i]
+		if checkpoint.timestamp < current_time - 0.5:  # 0.5s buffer
+			target_checkpoint = checkpoint
+			break
+	
+	if target_checkpoint:
+		audio_manager.seek(target_checkpoint.timestamp)
+		show_checkpoint_popup(target_checkpoint.name)
+		update_text.emit("◀ %.1fs - %s" % [target_checkpoint.timestamp, target_checkpoint.name])
+	else:
+		# Jump to beginning if no previous checkpoint
+		audio_manager.seek(0.0)
+		update_text.emit("◀ Jumped to beginning")
+
+func jump_to_next_checkpoint():
+	if not song_settings or not audio_manager:
+		update_text.emit("Song settings or audio not available")
+		return
+	
+	var current_time = audio_manager.get_playback_position()
+	var target_checkpoint = null
+	
+	# Find the next checkpoint (after current time)
+	for checkpoint in song_settings.checkpoints:
+		if checkpoint.timestamp > current_time + 0.5:  # 0.5s buffer
+			target_checkpoint = checkpoint
+			break
+	
+	if target_checkpoint:
+		audio_manager.seek(target_checkpoint.timestamp)
+		show_checkpoint_popup(target_checkpoint.name)
+		update_text.emit("▶ %.1fs - %s" % [target_checkpoint.timestamp, target_checkpoint.name])
+	else:
+		update_text.emit("▶ No more checkpoints ahead")
+		
+func show_checkpoint_popup(checkpoint_text: String):
+	"""Show a popup with the checkpoint text"""
+	# Create a temporary label for the popup
+	var popup_label = RichTextLabel.new()
+	popup_label.text = checkpoint_text
+	popup_label.bbcode_enabled = false
+	popup_label.add_theme_color_override("default_color", Color.WHITE)
+	
+	# Position it where the purple line is (center of screen)
+	var viewport_size = get_viewport().get_visible_rect().size
+	popup_label.position = Vector2(viewport_size.x / 2 - 100, viewport_size.y / 2)
+	popup_label.size = Vector2(200, 50)
+	
+	# Style the popup
+	popup_label.add_theme_color_override("font_shadow_color", Color.BLACK)
+	var background = ColorRect.new()
+	background.color = Color(0.5, 0.0, 0.5, 0.8)  # Purple background
+	background.position = popup_label.position - Vector2(10, 10)
+	background.size = popup_label.size + Vector2(20, 20)
+	
+	# Add to scene
+	add_child(background)
+	add_child(popup_label)
+	
+	# Auto-remove after 2 seconds
+	await get_tree().create_timer(2.0).timeout
+	background.queue_free()
+	popup_label.queue_free()
+
+func on_timeline_seek(timestamp: float):
+	if audio_manager:
+		audio_manager.seek(timestamp)
+		update_text.emit("Seeked to: %s" % format_timeline_time(timestamp))
+
+func format_timeline_time(seconds: float) -> String:
+	var minutes = int(seconds) / 60
+	var secs = int(seconds) % 60
+	return "%02d:%02d" % [minutes, secs]
+	
 
 func setup_shader_material():
 	if material == null:
 		print("ERROR: ColorRect has no material assigned!")
 		var new_material = ShaderMaterial.new()
-		var shader = load("res://kaldao.gdshader")  # Updated path
+		var shader = load("res://shaders/kaldao.gdshader")
 		new_material.shader = shader
 		material = new_material
 	shader_material = material
@@ -78,43 +188,37 @@ func setup_audio_manager():
 		print("ERROR: AudioManager node not found! Make sure AudioStreamPlayer node exists with AudioManager.gd script")
 		return
 	
-	# Connect audio reactivity to parameter manager
-	if audio_manager.audio_reactivity:
-		audio_manager.audio_reactivity.connect_to_parameter_manager(parameter_manager)
-		print("AudioReactivityManager connected to ParameterManager")
+	# Connect audio to parameter manager
+	audio_manager.connect_to_parameter_manager(parameter_manager)
 	
-	# Connect to audio device change signals
-	audio_manager.device_changed.connect(on_audio_device_changed)
-	
-	# Connect audio detection signals for visual feedback
+	# Connect to audio signals for debugging
 	audio_manager.bass_detected.connect(on_bass_detected)
 	audio_manager.mid_detected.connect(on_mid_detected)
 	audio_manager.treble_detected.connect(on_treble_detected)
 	audio_manager.beat_detected.connect(on_beat_detected)
 	
+	# Connect finished signal for looping
+	audio_manager.finished.connect(audio_manager._on_finished)
+	
 	print("Audio manager connected successfully")
 
-func on_audio_device_changed(device_name: String, is_input: bool):
-	var device_type = "Input" if is_input else "Output"
-	update_text.emit("Audio device: %s" % device_name)
-
 func on_bass_detected(intensity: float):
-	# Visual feedback for bass detection (optional)
-	if intensity > 0.01:  # Show even small bass
+	# Optional visual feedback
+	if intensity > 0.01:
 		print("DEBUG: Bass detected: %.3f" % intensity)
 
 func on_mid_detected(intensity: float):
-	# Visual feedback for mid frequency detection (optional)
+	# Optional visual feedback
 	if intensity > 0.01:
 		print("DEBUG: Mid detected: %.3f" % intensity)
 
 func on_treble_detected(intensity: float):
-	# Visual feedback for treble detection (optional)
+	# Optional visual feedback
 	if intensity > 0.01:
 		print("DEBUG: Treble detected: %.3f" % intensity)
 
 func on_beat_detected():
-	# Visual feedback for beat detection (optional)
+	# Optional visual feedback
 	print("DEBUG: Beat detected!")
 
 # Public API methods that other scripts can call
@@ -124,7 +228,7 @@ func increase_setting():
 		color_palette_manager.cycle_palette_forward()
 	else:
 		parameter_manager.increase_current_parameter()
-	update_parameter_display()
+	emit_current_parameter_info()
 
 func decrease_setting():
 	var param_name = parameter_manager.get_current_parameter_name()
@@ -132,15 +236,15 @@ func decrease_setting():
 		color_palette_manager.cycle_palette_backward()
 	else:
 		parameter_manager.decrease_current_parameter()
-	update_parameter_display()
+	emit_current_parameter_info()
 
 func next_setting():
 	parameter_manager.next_parameter()
-	update_parameter_display()
+	emit_current_parameter_info()
 
 func previous_setting():
 	parameter_manager.previous_parameter()
-	update_parameter_display()
+	emit_current_parameter_info()
 
 func reset_current_setting():
 	var param_name = parameter_manager.get_current_parameter_name()
@@ -151,12 +255,10 @@ func reset_current_setting():
 		parameter_manager.reset_current_parameter()
 		var param_value = parameter_manager.get_parameter_value(param_name)
 		update_text.emit("Reset %s to default: %.2f" % [param_name, param_value])
-	update_parameter_display()
 
 func reset_all_settings():
 	parameter_manager.reset_all_parameters()
 	color_palette_manager.reset_to_bw()
-	update_parameter_display()
 	update_text.emit("All settings reset to defaults")
 
 func toggle_pause():
@@ -189,43 +291,24 @@ func reset_colors_to_bw():
 	color_palette_manager.reset_to_bw()
 	update_text.emit("Colors reset to Black & White")
 
+func toggle_audio_playback():
+	"""Toggle audio playback on/off"""
+	if audio_manager:
+		var is_playing = audio_manager.toggle_audio_playback()
+		var status = "ON" if is_playing else "OFF"
+		update_text.emit("Audio Playback: %s" % status)
+	else:
+		update_text.emit("Audio not available")
+
 func toggle_audio_reactive():
-	if audio_manager and audio_manager.audio_reactivity:
-		var is_active = audio_manager.audio_reactivity.toggle_audio_reactive()
-		var status = "ON" if is_active else "OFF"
+	"""Toggle audio reactivity on/off"""
+	if audio_manager:
+		var is_reactive = audio_manager.toggle_audio_reactive()
+		var status = "ON" if is_reactive else "OFF"
 		update_text.emit("Audio Reactive: %s" % status)
 		
-		# Also show current audio levels for debugging
-		if is_active and audio_manager:
-			var levels = audio_manager.get_audio_levels()
-			print("DEBUG: Audio levels - Bass: %.3f, Mid: %.3f, Treble: %.3f" % [levels.bass, levels.mid, levels.treble])
-	else:
-		update_text.emit("Audio system not available")
-
-func cycle_audio_device():
-	if audio_manager:
-		audio_manager.cycle_input_device()
-		# Show current device info
-		update_text.emit(audio_manager.get_current_audio_device_info())
-	else:
-		update_text.emit("Audio not available")
-
-func cycle_output_device():
-	"""Cycle through output devices"""
-	if audio_manager:
-		audio_manager.cycle_output_device()
-		# Show current device info
-		var output_device = audio_manager.get_current_output_device()
-		update_text.emit("Output device: %s" % output_device)
-	else:
-		update_text.emit("Audio not available")
-
-func toggle_audio_processing():
-	"""Toggle the audio processing on/off (separate from reactivity)"""
-	if audio_manager:
-		var is_enabled = audio_manager.toggle_audio_processing()
-		var status = "ON" if is_enabled else "OFF"
-		update_text.emit("Audio Processing: %s" % status)
+		if is_reactive:
+			update_text.emit("Audio Reactive: %s\nVisuals now respond to the music!" % status)
 	else:
 		update_text.emit("Audio not available")
 
@@ -237,81 +320,141 @@ func save_settings():
 		"timestamp": Time.get_datetime_string_from_system()
 	}
 	
-	# Generate filename with timestamp for uniqueness
+	# Save to BOTH timestamped file (archive) AND quick-save file (for Ctrl+L)
 	var time_dict = Time.get_datetime_dict_from_system()
-	var filename = "fractal_settings_%04d%02d%02d_%02d%02d%02d.json" % [
+	var timestamped_filename = "fractal_settings_%04d%02d%02d_%02d%02d%02d.json" % [
 		time_dict.year, time_dict.month, time_dict.day,
 		time_dict.hour, time_dict.minute, time_dict.second
 	]
 	
-	var file_path = "user://" + filename
-	var file = FileAccess.open(file_path, FileAccess.WRITE)
+	var quick_save_filename = "fractal_settings_current.json"  # Fixed filename for quick load
+	var archive_filename = timestamped_filename  # Timestamped for archive
 	
-	if file:
-		var json_string = JSON.stringify(settings_data, "\t")
-		file.store_string(json_string)
-		file.close()
-		
-		# Convert to absolute path for user display
-		var absolute_path = ProjectSettings.globalize_path(file_path)
-		
-		print("Settings saved to: ", absolute_path)
-		update_text.emit("Settings saved to:\n" + absolute_path)
-		
-		# Also print the user:// location info for debugging
-		print("Godot user:// directory: ", OS.get_user_data_dir())
+	var json_string = JSON.stringify(settings_data, "\t")
+	
+	# Save the timestamped archive copy
+	var archive_path = "res://data/config/" + archive_filename
+	var archive_file = FileAccess.open(archive_path, FileAccess.WRITE)
+	var archive_success = false
+	
+	if archive_file:
+		archive_file.store_string(json_string)
+		archive_file.close()
+		archive_success = true
+		print("Settings archived to: ", ProjectSettings.globalize_path(archive_path))
+	
+	# Save the quick-save copy (overwrites previous)
+	var quick_save_path = "res://data/config/" + quick_save_filename
+	var quick_save_file = FileAccess.open(quick_save_path, FileAccess.WRITE)
+	var quick_save_success = false
+	
+	if quick_save_file:
+		quick_save_file.store_string(json_string)
+		quick_save_file.close()
+		quick_save_success = true
+		print("Settings quick-saved to: ", ProjectSettings.globalize_path(quick_save_path))
+	
+	# Report results to user
+	if archive_success and quick_save_success:
+		var absolute_archive_path = ProjectSettings.globalize_path(archive_path)
+		update_text.emit("Settings saved!\nArchive: %s\nQuick-save ready for Ctrl+L" % timestamped_filename)
+		print("Both saves successful. Config directory: res://data/config/")
+	elif quick_save_success:
+		update_text.emit("Quick-save successful!\nCtrl+L will restore these settings\n(Archive save failed)")
+	elif archive_success:
+		update_text.emit("Archive save successful!\n(Quick-save failed - Ctrl+L may not work)")
 	else:
-		print("ERROR: Could not create settings file!")
+		print("ERROR: Both save operations failed!")
 		update_text.emit("ERROR: Could not save settings!")
 
 func load_settings():
-	var file = FileAccess.open("user://fractal_settings.json", FileAccess.READ)
-	if file:
-		var json_string = file.get_as_text()
-		file.close()
+	# Try to load from the quick-save file first (most recent Ctrl+S save)
+	var quick_save_path = "res://data/config/fractal_settings_current.json"
+	var file = FileAccess.open(quick_save_path, FileAccess.READ)
+	
+	var source_description = ""
+	
+	if not file:
+		# Fallback to the old fixed filename for backwards compatibility
+		var legacy_path = "res://data/config/fractal_settings.json"
+		file = FileAccess.open(legacy_path, FileAccess.READ)
+		source_description = "legacy fractal_settings.json"
 		
-		var json = JSON.new()
-		var parse_result = json.parse(json_string)
-		
-		if parse_result == OK:
-			var save_data = json.data
+		if not file:
+			# Final fallback to user:// directory for existing saves
+			legacy_path = "user://fractal_settings.json"
+			file = FileAccess.open(legacy_path, FileAccess.READ)
+			source_description = "user:// legacy file"
 			
-			# Load all parameter values
-			var parameters = parameter_manager.get_all_parameters()
-			for param_name in parameters:
-				if param_name in save_data:
-					parameter_manager.set_parameter_value(param_name, save_data[param_name])
-			
-			# Load color palette data
-			color_palette_manager.load_palette_data(save_data)
-			
-			# Load audio settings
-			if audio_manager and "audio_reactive" in save_data:
-				var should_be_reactive = save_data["audio_reactive"]
-				var current_reactive = audio_manager.is_audio_reactive()
-				if should_be_reactive != current_reactive:
-					audio_manager.toggle_audio_reactive()
-			
-			update_parameter_display()
-			update_text.emit("Settings loaded from user://fractal_settings.json")
-		else:
-			update_text.emit("Error: Could not parse settings file")
+			if not file:
+				update_text.emit("No saved settings found.\nUse Ctrl+S to save current settings.")
+				return
 	else:
-		update_text.emit("No saved settings file found")
+		source_description = "most recent Ctrl+S save"
+	
+	var json_string = file.get_as_text()
+	file.close()
+	
+	var json = JSON.new()
+	var parse_result = json.parse(json_string)
+	
+	if parse_result == OK:
+		var save_data = json.data
+		
+		# Validate the save data has the expected structure
+		if not ("parameters" in save_data):
+			update_text.emit("Error: Invalid settings file format")
+			return
+		
+		# Load all parameter values
+		var loaded_count = 0
+		var parameters = parameter_manager.get_all_parameters()
+		
+		# Load individual parameter values from the nested structure
+		for param_name in parameters:
+			if param_name in save_data["parameters"]:
+				var param_data = save_data["parameters"][param_name]
+				if typeof(param_data) == TYPE_DICTIONARY and "current" in param_data:
+					# New format: parameter data contains min/max/current/etc
+					parameter_manager.set_parameter_value(param_name, param_data["current"])
+					loaded_count += 1
+				elif typeof(param_data) == TYPE_FLOAT or typeof(param_data) == TYPE_INT:
+					# Legacy format: parameter data is just the value
+					parameter_manager.set_parameter_value(param_name, param_data)
+					loaded_count += 1
+		
+		# Load color palette data if present
+		if "palette" in save_data:
+			color_palette_manager.load_palette_data(save_data["palette"])
+		
+		# Show success message with timestamp if available
+		var timestamp_info = ""
+		if "timestamp" in save_data:
+			timestamp_info = "\nSaved: %s" % save_data["timestamp"]
+		
+		update_text.emit("Settings loaded from %s\n%d parameters restored%s" % [
+			source_description, 
+			loaded_count,
+			timestamp_info
+		])
+		
+		print("Load successful - %d parameters loaded from %s" % [loaded_count, source_description])
+	else:
+		update_text.emit("Error: Could not parse settings file")
+		print("JSON parse error: ", json.error_string)
 
 func get_all_settings_text():
 	var audio_info = ""
 	if audio_manager:
-		var reactive_status = "OFF"
-		if audio_manager.is_audio_reactive():
-			reactive_status = "ON"
-		
-		# Show current audio levels for debugging
-		var levels = audio_manager.get_audio_levels()
-		audio_info = "Audio Reactive: %s\n%s\nLevels - Bass: %.2f Mid: %.2f Treble: %.2f" % [
-			reactive_status, 
-			audio_manager.get_current_audio_device_info(),
-			levels.bass, levels.mid, levels.treble
+		var status_info = audio_manager.get_status_info()
+		audio_info = "Audio File: KOCH5.wav\nPlayback: %s\nReactive: %s\nPosition: %.1fs / %.1fs\nLevels - Bass: %.2f Mid: %.2f Treble: %.2f" % [
+			"ON" if status_info.enabled else "OFF",
+			"ON" if status_info.reactive else "OFF",
+			status_info.position,
+			status_info.duration,
+			status_info.levels.bass, 
+			status_info.levels.mid, 
+			status_info.levels.treble
 		]
 	
 	var base_text = parameter_manager.get_formatted_settings_text(audio_info)
@@ -319,7 +462,8 @@ func get_all_settings_text():
 	
 	return base_text + palette_text
 
-func update_parameter_display():
+func emit_current_parameter_info():
+	"""Helper function to emit current parameter information"""
 	var param_name = parameter_manager.get_current_parameter_name()
 	var display_text = ""
 	
@@ -337,6 +481,21 @@ func on_screenshot_taken(file_path: String):
 func on_screenshot_failed(error_message: String):
 	update_text.emit(error_message)
 
+func import_audacity_labels():
+	# You can also use a file dialog here
+	var success = song_settings.import_audacity_labels("res://koch5_labels.txt")
+	if success:
+		update_text.emit("Imported checkpoints from Audacity labels")
+	else:
+		update_text.emit("Failed to import Audacity labels")
+
+func export_audacity_labels():
+	var file_path = "user://exported_labels.txt"
+	var success = song_settings.export_to_audacity_labels(file_path)
+	if success:
+		var absolute_path = ProjectSettings.globalize_path(file_path)
+		update_text.emit("Exported labels to: %s" % absolute_path)
+
 func _process(delta):
 	# Update camera position based on fly_speed
 	var current_fly_speed = parameter_manager.get_parameter_value("fly_speed")
@@ -351,10 +510,6 @@ func _process(delta):
 	
 	var current_color_speed = parameter_manager.get_parameter_value("color_speed")
 	accumulated_color_time += current_color_speed * delta
-	
-	# Process audio reactivity manager (for beat timing)
-	if audio_manager and audio_manager.audio_reactivity:
-		audio_manager.audio_reactivity._process(delta)
 	
 	# Send all the accumulated values to the shader
 	shader_controller.update_parameter("camera_position", camera_position)
