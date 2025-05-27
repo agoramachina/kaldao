@@ -1,0 +1,63 @@
+[gd_scene load_steps=5 format=3 uid="uid://dlruxljue1h12"]
+
+[ext_resource type="Shader" uid="uid://cfrdf6r4gska6" path="res://shaders/kaldao.gdshader" id="1_j6vps"]
+[ext_resource type="Script" uid="uid://btcfivgi3ur1s" path="res://scripts/debug/ControlDebug.gd" id="1_qfin5"]
+[ext_resource type="Script" uid="uid://c0g0dv35k80mk" path="res://scripts/debug/ShaderDebug.gd" id="2_j6vps"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_uuorw"]
+shader = ExtResource("1_j6vps")
+shader_parameter/camera_position = 0.0
+shader_parameter/rotation_time = 0.0
+shader_parameter/plane_rotation_time = 0.0
+shader_parameter/color_time = 0.0
+shader_parameter/fly_speed = 0.25
+shader_parameter/contrast = 1.0
+shader_parameter/kaleidoscope_segments = 10.0
+shader_parameter/layer_count = 6
+shader_parameter/truchet_radius = 0.35
+shader_parameter/center_fill_radius = 0.0
+shader_parameter/rotation_speed = 0.025
+shader_parameter/plane_rotation_speed = 0.5
+shader_parameter/zoom_level = 0.3
+shader_parameter/color_intensity = 1.0
+shader_parameter/camera_tilt_x = 0.0
+shader_parameter/camera_tilt_y = 0.0
+shader_parameter/camera_roll = 0.0
+shader_parameter/path_stability = 1.0
+shader_parameter/path_scale = 1.0
+shader_parameter/use_color_palette = false
+shader_parameter/invert_colors = false
+shader_parameter/color_speed = 0.5
+shader_parameter/palette_a = Vector3(0.5, 0.5, 0.5)
+shader_parameter/palette_b = Vector3(0.5, 0.5, 0.5)
+shader_parameter/palette_c = Vector3(1, 1, 1)
+shader_parameter/palette_d = Vector3(0, 0.33, 0.67)
+
+[node name="Control" type="Control"]
+material = SubResource("ShaderMaterial_uuorw")
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_qfin5")
+
+[node name="ColorRect" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("2_j6vps")
+metadata/_edit_use_anchors_ = true
+
+[node name="Menu" type="RichTextLabel" parent="."]
+layout_mode = 1
+offset_right = 1.0
+
+[node name="Popup" type="RichTextLabel" parent="."]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
