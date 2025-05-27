@@ -61,7 +61,9 @@ func _initialize_ui_components():
 	"""Initialize UI components that need direct node references"""
 	print("RefactoredControlManager: Initializing UI components...")
 	
-
+	# Set window size
+	print("DEBUG: Window size set to: ", get_window().size)
+	print("DEBUG: Canvas size set to: ", canvas.size)
 	
 	# Initialize UI managers
 	menu_manager = MenuManager.new(settings_label, commands_label, label)

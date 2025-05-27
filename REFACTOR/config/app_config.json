@@ -1,0 +1,102 @@
+{
+	"version": "1.0",
+	"audio": {
+		"default_file": "res://audio/SoS.wav",
+		"amplifiers": {
+			"bass": 15.0,
+			"mid": 12.0,
+			"treble": 10.0,
+			"overall": 3.0
+		},
+		"beat_detection": {
+			"threshold_multiplier": 1.3,
+			"min_interval": 0.12,
+			"duration": 0.4,
+			"sensitivity": 0.8,
+			"dynamic_threshold": true,
+			"multiple_methods": true,
+			"variance_threshold": 2.0,
+			"recent_window": 30,
+			"medium_window": 90
+		},
+		"frequency_ranges": {
+			"bass_min": 20.0,
+			"bass_max": 200.0,
+			"mid_min": 200.0,
+			"mid_max": 3000.0,
+			"treble_min": 3000.0,
+			"treble_max": 20000.0
+		},
+		"analysis": {
+			"fft_size": 2048,
+			"spectrum_buffer_length": 2.0,
+			"smoothing_factor": 0.08,
+			"sample_rate": 44100.0
+		},
+		"reactivity": {
+			"bass_intensity": 8.0,
+			"mid_intensity": 3.0,
+			"treble_intensity": 2.5
+		}
+	},
+	"visual": {
+		"shaders": {
+			"default_shader": "res://shaders/kaldao.gdshader",
+			"kaleidoscope_shader": "res://shaders/kaleidoscope.gdshader",
+			"koch_shader": "res://shaders/koch.gdshader"
+		},
+		"effects": {
+			"auto_fade_delay": 1.5,
+			"startup_menu_duration": 8.0,
+			"parameter_fade_duration": 1.0,
+			"beat_effect_duration": 0.4
+		},
+		"colors": {
+			"default_palette": "bw",
+			"color_transition_speed": 0.5,
+			"intensity_range": [0.1, 4.0]
+		},
+		"camera": {
+			"default_position": [0.0, 0.0, 0.0],
+			"movement_smoothing": 0.1,
+			"rotation_smoothing": 0.05
+		}
+	},
+	"input": {
+		"debug_mode": false,
+		"double_tap_threshold": 0.3,
+		"key_repeat_delay": 0.1,
+		"mouse_sensitivity": 1.0
+	},
+	"ui": {
+		"timeline": {
+			"height": 60,
+			"margin": 20,
+			"update_interval": 0.1,
+			"scrub_sensitivity": 1.0
+		},
+		"menu": {
+			"fade_duration": 1.0,
+			"background_opacity": 0.8,
+			"text_size": 12
+		},
+		"parameter_display": {
+			"show_duration": 3.0,
+			"fade_duration": 1.0,
+			"position": "center"
+		}
+	},
+	"performance": {
+		"target_fps": 60,
+		"vsync_enabled": true,
+		"debug_print_interval": 30,
+		"memory_pool_size": 1024,
+		"max_audio_history": 180
+	},
+	"files": {
+		"screenshot_dir": "res://data/screenshots/",
+		"settings_dir": "res://data/config/",
+		"audio_dir": "res://audio/",
+		"shader_dir": "res://shaders/"
+	}
+}
