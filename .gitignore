@@ -6,7 +6,7 @@ export_presets.cfg
 # User-specific files
 .vscode/
 
-# Temporary files
+# Temporary files throughout the project
 *.tmp
 *.uid
 *.import
@@ -16,8 +16,7 @@ export_presets.cfg
 data/config/*
 data/screenshots/*
 
-# Git files (exclude the ignore file itself and attributes)
-.gitignore
+# Git configuration files (but not .gitignore itself)
 .gitattributes
 .editorconfig
 
@@ -25,3 +24,35 @@ data/screenshots/*
 *.tscn.*
 *.scn.*
 *.escn.*
+
+# Additional Godot temporary and cache files
+*.remap
+*.translation
+*.cfg.tmp
+*.tres.tmp
+*.tscn.tmp
+*.gd.tmp
+
+# Build and export files
+builds/
+exports/
+*.pck
+*.exe
+*.dmg
+*.app
+*.apk
+*.ipa
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+
+# IDE and editor files
+*.sublime-*
+*.code-workspace
+.idea/
+*.iml
