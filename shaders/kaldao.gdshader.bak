@@ -16,9 +16,7 @@ uniform float contrast = 1.0;              // Sharpness of edges and details
 
 // Pattern controls
 uniform float kaleidoscope_segments = 10.0;    // How many mirror segments (creates the star pattern)
-uniform int layer_count = 6;
 uniform float truchet_radius = 0.35;           // Size of the circular patterns in each cell
-uniform float center_fill_radius = 0.0;        // Size of the center fill (0.0 for no fill)
 uniform float rotation_speed = 0.025;          // How fast patterns rotate
 uniform float plane_rotation_speed = 0.5;      // Per-layer rotation speed
 uniform float zoom_level = 0.3;                // How zoomed in we are (smaller = more zoomed in)
@@ -117,7 +115,7 @@ vec3 palette(float t) {
 }
 
 // Post-processing: applies colors, gamma correction, vignette, and effects
-vec3 postProcess(vec3 col, vec2 q, vec2 aspect) {
+vec3 postProcess(vec3 col, vec2 q) {
     // Apply color palette if enabled
     if (use_color_palette) {
         float t = length(col) + color_time;  // Use brightness + time as palette input
@@ -131,12 +129,14 @@ vec3 postProcess(vec3 col, vec2 q, vec2 aspect) {
     
     // Vignette effect: darker at edges, brighter in center
     col *= 0.5 + 0.5 * pow(19.0 * q.x * q.y * (1.0 - q.x) * (1.0 - q.y), 0.7);
+
     col *= color_intensity;  // Apply overall brightness control
     
     // Color inversion: flip all colors (like a photo negative)
     if (invert_colors) {
         col = vec3(1.0) - col;
     }
+
     return col;
 }
 
@@ -221,8 +221,8 @@ vec3 ddoffset(float z) {
 // ====================
 
 // Distance field for a single truchet cell - this defines the pattern shapes
-// Returns: x = distance to nearest pattern edge, y = distance to cell center, z = center circle info
-vec3 cell_df(float r, vec2 np, vec2 mp, vec2 off) {
+// Returns: x = distance to nearest pattern edge, y = distance to cell center
+vec2 cell_df(float r, vec2 np, vec2 mp, vec2 off) {
     // These are the two diagonal directions that define truchet patterns
     vec2 n0 = normalize(vec2(1.0, 1.0));   // Northeast diagonal
     vec2 n1 = normalize(vec2(1.0, -1.0));  // Southeast diagonal
@@ -268,13 +268,11 @@ vec3 cell_df(float r, vec2 np, vec2 mp, vec2 off) {
     }
     // 15% chance: just the circle (h0 <= 0.15)
     
-    // Check if we're inside the center circle
-    float center_circle_factor = step(length(mp), r);  // 1.0 if inside center circle, 0.0 if outside
-    return vec3(d, (d0 - r), center_circle_factor);  // Return pattern distance, circle distance, and center info
+    return vec2(d, (d0 - r));  // Return pattern distance and circle distance
 }
 
 // Main truchet distance function: calculates pattern for any world position
-vec3 truchet_df(float r, vec2 p) {
+vec2 truchet_df(float r, vec2 p) {
     vec2 np = floor(p + 0.5);      // Which cell are we in?
     vec2 mp = fract(p + 0.5) - 0.5; // Position within that cell (-0.5 to 0.5)
     return cell_df(r, np, mp, vec2(0.0));
@@ -299,9 +297,6 @@ vec4 plane(vec3 ro, vec3 rd, vec3 pp, vec3 off, float aa, float n) {
     // Get 2D coordinates on this plane
     vec2 p = (pp - off * vec3(1.0, 1.0, 0.0)).xy;
     
-    // Store the original plane coordinates for center detection
-    vec2 original_p = p;
-    
     // Apply per-plane rotation (each layer rotates at different speed)
     p *= ROT(plane_rotation_time * (h4 - 0.5));
     
@@ -321,9 +316,9 @@ vec4 plane(vec3 ro, vec3 rd, vec3 pp, vec3 off, float aa, float n) {
     // Calculate truchet pattern
     float tl = tanh_approx(0.33 * l);    // Distance-based effect
     float r = truchet_radius;            // Size of circular elements
-    vec3 d3 = truchet_df(r, p);          // Get distance to pattern + center circle info
-    d3.xy *= z;                          // Scale distance by zoom
-    float d = d3.x;                      // Distance to nearest pattern edge
+    vec2 d2 = truchet_df(r, p);          // Get distance to pattern
+    d2 *= z;                             // Scale distance by zoom
+    float d = d2.x;                      // Distance to nearest pattern edge
     float lw = 0.025 * z;                // Line width
     d -= lw;                             // Expand the pattern slightly
     
@@ -333,18 +328,12 @@ vec4 plane(vec3 ro, vec3 rd, vec3 pp, vec3 off, float aa, float n) {
     // Add fine detail lines
     col = mix(col, vec3(0.0), smoothstep(mix(1.0, -0.5, tl), 1.0, sin(PI * 100.0 * d)));
     
-    // Center fill - using original plane coordinates (before all transformations)
-    float center_distance = length(original_p);
-    float center_edge = smoothstep(center_fill_radius + aa, center_fill_radius - aa, center_distance);
-    float transparency = 0.99;  // Adjust this for transparency level (0.0 = invisible, 1.0 = opaque)
-    col = mix(col, vec3(0.0), center_edge * step(0.01, center_fill_radius) * transparency);
-   
-    // Calculate transparency (alpha) for this layer (try switching around -aa and aa for neat effects!)
-    float t = smoothstep(aa, -aa, -d3.y - 3.0 * lw) *		
-              mix(0.5, 1.0, smoothstep(aa, -aa, -d3.y - lw));
-
     // Cut out areas outside the main circle
-    col = mix(col, vec3(0.01), step(d3.y, 0.0));		
+    col = mix(col, vec3(0.0), step(d2.y, 0.0));
+    
+    // Calculate transparency (alpha) for this layer
+    float t = smoothstep(aa, -aa, -d2.y - 3.0 * lw) *
+              mix(0.5, 1.0, smoothstep(aa, -aa, -d2.y - lw));
     
     return vec4(col, t);  // Return color with transparency
 }
@@ -371,8 +360,8 @@ vec3 color(vec3 ww, vec3 uu, vec3 vv, vec3 ro, vec2 p) {
     vec3 nrd = normalize(np.x * uu + np.y * vv + rdd * ww); // Offset ray for AA
     
     // Layer rendering parameters
-    float planeDist = 1.0 - 0.25;        // Distance between layers
-    int furthest = layer_count;          // How many layers to render
+    float planeDist = 1.0 - 0.25;      // Distance between layers
+    int furthest = 6;                   // How many layers to render
     int fadeFrom = max(furthest - 5, 0); // When to start fading
     
     float nz = floor(ro.z / planeDist); // Which layer are we starting from?
@@ -460,12 +449,9 @@ void fragment() {
     vec2 p = -1.0 + 2.0 * q;                               // -1 to 1
     p.x *= (1.0 / SCREEN_PIXEL_SIZE).x / (1.0 / SCREEN_PIXEL_SIZE).y;  // Correct aspect ratio
     
-    // Store aspect ratio for postProcess
-    vec2 aspect = vec2((1.0 / SCREEN_PIXEL_SIZE).x, (1.0 / SCREEN_PIXEL_SIZE).y);
-    
     // Render the effect and apply post-processing
     vec3 col = effect(p, q);
-    col = postProcess(col, q, aspect);
+    col = postProcess(col, q);
     
     // Output final color
     COLOR = vec4(col, 1.0);

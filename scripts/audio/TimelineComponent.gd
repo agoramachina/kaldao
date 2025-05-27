@@ -48,7 +48,7 @@ func _ready():
 	gui_input.connect(_on_gui_input)
 	
 	# Force visibility and size
-	visible = true
+	visible = false ## UNCOMMENT THIS TO SHOW THE TIMELINE!!!
 	modulate = Color.WHITE
 	z_index = 100  # Make sure it's on top
 	

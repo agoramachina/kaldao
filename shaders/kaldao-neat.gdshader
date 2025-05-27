@@ -16,7 +16,6 @@ uniform float contrast = 1.0;              // Sharpness of edges and details
 
 // Pattern controls
 uniform float kaleidoscope_segments = 10.0;    // How many mirror segments (creates the star pattern)
-uniform int layer_count = 6;
 uniform float truchet_radius = 0.35;           // Size of the circular patterns in each cell
 uniform float center_fill_radius = 0.0;        // Size of the center fill (0.0 for no fill)
 uniform float rotation_speed = 0.025;          // How fast patterns rotate
@@ -131,12 +130,14 @@ vec3 postProcess(vec3 col, vec2 q, vec2 aspect) {
     
     // Vignette effect: darker at edges, brighter in center
     col *= 0.5 + 0.5 * pow(19.0 * q.x * q.y * (1.0 - q.x) * (1.0 - q.y), 0.7);
+
     col *= color_intensity;  // Apply overall brightness control
     
     // Color inversion: flip all colors (like a photo negative)
     if (invert_colors) {
         col = vec3(1.0) - col;
     }
+
     return col;
 }
 
@@ -270,6 +271,7 @@ vec3 cell_df(float r, vec2 np, vec2 mp, vec2 off) {
     
     // Check if we're inside the center circle
     float center_circle_factor = step(length(mp), r);  // 1.0 if inside center circle, 0.0 if outside
+    
     return vec3(d, (d0 - r), center_circle_factor);  // Return pattern distance, circle distance, and center info
 }
 
@@ -299,17 +301,17 @@ vec4 plane(vec3 ro, vec3 rd, vec3 pp, vec3 off, float aa, float n) {
     // Get 2D coordinates on this plane
     vec2 p = (pp - off * vec3(1.0, 1.0, 0.0)).xy;
     
-    // Store the original plane coordinates for center detection
-    vec2 original_p = p;
-    
     // Apply per-plane rotation (each layer rotates at different speed)
     p *= ROT(plane_rotation_time * (h4 - 0.5));
-    
+
     // Apply kaleidoscope effect
-    float rep = kaleidoscope_segments;  // Number of mirror segments
-    float sm = 0.05 * 20.0 / rep;       // Smoothing amount (less for more segments)
-    float sn = smoothKaleidoscope(p, sm, rep);  // Apply the mirroring
-    
+        float rep = kaleidoscope_segments;
+    float sm = 0.05 * 20.0 / rep;
+    float sn = smoothKaleidoscope(p, sm, rep);
+
+    // Store distance to center AFTER kaleidoscope transformation - this is the key!
+    float post_kaleidoscope_distance = length(p);
+
     // Apply main rotation
     p *= ROT(2.0 * PI * h0 + rotation_time);
     
@@ -333,18 +335,18 @@ vec4 plane(vec3 ro, vec3 rd, vec3 pp, vec3 off, float aa, float n) {
     // Add fine detail lines
     col = mix(col, vec3(0.0), smoothstep(mix(1.0, -0.5, tl), 1.0, sin(PI * 100.0 * d)));
     
-    // Center fill - using original plane coordinates (before all transformations)
-    float center_distance = length(original_p);
-    float center_edge = smoothstep(center_fill_radius + aa, center_fill_radius - aa, center_distance);
+    // Center fill - mathematical approach using pre-kaleidoscope distance
+    float center_distance = post_kaleidoscope_distance;
+    float center_mask = smoothstep(center_fill_radius - aa, center_fill_radius + aa, center_distance);
     float transparency = 0.99;  // Adjust this for transparency level (0.0 = invisible, 1.0 = opaque)
-    col = mix(col, vec3(0.0), center_edge * step(0.01, center_fill_radius) * transparency);
-   
-    // Calculate transparency (alpha) for this layer (try switching around -aa and aa for neat effects!)
-    float t = smoothstep(aa, -aa, -d3.y - 3.0 * lw) *		
-              mix(0.5, 1.0, smoothstep(aa, -aa, -d3.y - lw));
-
+    col = mix(vec3(0.0), col, center_mask * step(0.001, center_fill_radius) * transparency);
+    
     // Cut out areas outside the main circle
-    col = mix(col, vec3(0.01), step(d3.y, 0.0));		
+    col = mix(col, vec3(0.0), step(d3.y, 0.0));
+    
+    // Calculate transparency (alpha) for this layer
+    float t = smoothstep(aa, -aa, -d3.y - 3.0 * lw) *
+              mix(0.5, 1.0, smoothstep(-aa, +aa, -d3.y - lw));
     
     return vec4(col, t);  // Return color with transparency
 }
@@ -371,8 +373,8 @@ vec3 color(vec3 ww, vec3 uu, vec3 vv, vec3 ro, vec2 p) {
     vec3 nrd = normalize(np.x * uu + np.y * vv + rdd * ww); // Offset ray for AA
     
     // Layer rendering parameters
-    float planeDist = 1.0 - 0.25;        // Distance between layers
-    int furthest = layer_count;          // How many layers to render
+    float planeDist = 1.0 - 0.25;      // Distance between layers
+    int furthest = 6;                   // How many layers to render
     int fadeFrom = max(furthest - 5, 0); // When to start fading
     
     float nz = floor(ro.z / planeDist); // Which layer are we starting from?

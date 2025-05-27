@@ -12,6 +12,8 @@ var parameters = {
 	"contrast": {"min": 0.1, "max": 5.0, "current": 1.0, "step": 0.1, "description": "Contrast"},
 	"kaleidoscope_segments": {"min": 4.0, "max": 80.0, "current": 10.0, "step": 2.0, "description": "Kaleidoscope Segments"},
 	"truchet_radius": {"min": -1.0, "max": 1.0, "current": 0.35, "step": 0.01, "description": "Truchet Radius"},
+	"center_fill_radius": {"min": -2.0, "max": 2.0, "current": 0.2, "step": 0.01, "description": "Center Radius Fill"},
+	"layer_count": {"min": 0, "max": 10, "current": 6, "step":1, "description": "Layer Count"},
 	"rotation_speed": {"min": -6.0, "max": 6.0, "current": 0.025, "step": 0.01, "description": "Rotation Speed"},
 	"zoom_level": {"min": -5.0, "max": 5.0, "current": 0.3, "step": 0.05, "description": "Zoom Level"},
 	"color_intensity": {"min": 0.1, "max": 2.0, "current": 1.0, "step": 0.1, "description": "Color Intensity"},
@@ -32,6 +34,8 @@ var default_values = {
 	"contrast": 1.0,
 	"kaleidoscope_segments": 10.0,  # EVEN number
 	"truchet_radius": 0.35,
+	"center_fill_radius": 0.2,
+	"layer_count": 6,
 	"rotation_speed": 0.025,
 	"zoom_level": 0.3,
 	"color_intensity": 1.0,
