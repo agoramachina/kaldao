@@ -1,10 +1,12 @@
+# New simplified approach - separate invert control from palettes
 extends RefCounted
 class_name ColorPaletteManager
 
 # Signals
 signal palette_changed(palette_data: Dictionary, use_palette: bool)
+signal invert_changed(should_invert: bool)  # NEW: Separate invert signal
 
-# Color palette definitions
+# Color palette definitions - BACK TO ORIGINAL, NO INVERT FLAGS
 var color_palettes = [
 	# B&W (default/off)
 	{"name": "B&W", "a": Vector3(0.5, 0.5, 0.5), "b": Vector3(0.5, 0.5, 0.5), "c": Vector3(1.0, 1.0, 1.0), "d": Vector3(0.0, 0.0, 0.0)},
@@ -27,6 +29,7 @@ var custom_random_palette = {"name": "Random", "a": Vector3.ZERO, "b": Vector3.Z
 
 var current_palette_index = 0
 var using_random_color = false
+var is_inverted = false  # NEW: Simple boolean for inversion
 
 func cycle_palette_forward():
 	using_random_color = false
@@ -39,6 +42,12 @@ func cycle_palette_backward():
 	if current_palette_index < 0:
 		current_palette_index = color_palettes.size() - 1
 	emit_current_palette()
+
+func toggle_invert():
+	"""Toggle inversion on/off for any palette"""
+	is_inverted = !is_inverted
+	invert_changed.emit(is_inverted)
+	print("ColorPaletteManager: Invert toggled to: ", is_inverted)
 
 func randomize_colors():
 	# Generate completely random color palette values
@@ -53,17 +62,25 @@ func randomize_colors():
 func reset_to_bw():
 	using_random_color = false
 	current_palette_index = 0  # B&W is index 0
+	is_inverted = false  # Also reset inversion
 	emit_current_palette()
+	invert_changed.emit(is_inverted)
 
 func get_current_palette_name() -> String:
+	var base_name = ""
 	if using_random_color:
-		return "Random"
+		base_name = "Random"
 	else:
-		return color_palettes[current_palette_index]["name"]
+		base_name = color_palettes[current_palette_index]["name"]
+	
+	if is_inverted:
+		return base_name + " (Inverted)"
+	else:
+		return base_name
 
 func get_current_palette_display() -> String:
 	var palette_name = get_current_palette_name()
-	return "Color Palette: %s\n[↑/↓] cycle palettes\n[←/→] change parameter [r] reset [R] reset all" % palette_name
+	return "Color Palette: %s\n[↑/↓] cycle palettes  [I] toggle invert\n[←/→] change parameter [r] reset [R] reset all" % palette_name
 
 func emit_current_palette():
 	var palette
@@ -76,12 +93,14 @@ func emit_current_palette():
 	var use_palette = current_palette_index > 0 or using_random_color
 	
 	palette_changed.emit(palette, use_palette)
+	invert_changed.emit(is_inverted)  # Always emit current invert state
 
 func save_palette_data() -> Dictionary:
 	return {
 		"current_palette_index": current_palette_index,
 		"using_random_color": using_random_color,
-		"custom_random_palette": custom_random_palette
+		"custom_random_palette": custom_random_palette,
+		"is_inverted": is_inverted  # Save invert state
 	}
 
 func load_palette_data(data: Dictionary):
@@ -91,5 +110,7 @@ func load_palette_data(data: Dictionary):
 		using_random_color = data["using_random_color"]
 	if "custom_random_palette" in data:
 		custom_random_palette = data["custom_random_palette"]
+	if "is_inverted" in data:
+		is_inverted = data["is_inverted"]
 	
 	emit_current_palette()

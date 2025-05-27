@@ -43,22 +43,32 @@ func connect_managers(param_mgr: ParameterManager, color_mgr: ColorPaletteManage
 	color_palette_manager = color_mgr
 	audio_manager = audio_mgr
 	
+	#print("DEBUG: SongSettings.connect_managers called")
+	#print("DEBUG: audio_manager set to: %s" % str(audio_manager))
+	#print("DEBUG: audio_manager.playing: %s" % str(audio_manager.playing if audio_manager else "NULL"))
+	
 	if audio_manager and audio_manager.stream:
 		song_duration = audio_manager.stream.get_length()
-		print("SongSettings: Connected to audio, song duration: %.1f seconds" % song_duration)
+	# 	print("SongSettings: Connected to audio, duration: %.1fs" % song_duration)
+	# else:
+	# 	print("SongSettings: WARNING - No audio stream found!")
 	
-	print("SongSettings: Connected to parameter and color managers")
+	# print("SongSettings: Connected to parameter and color managers")
 
 func setup_default_song_structure():
 	"""Setup empty checkpoints array - use import_audacity_labels() to load from Audacity"""
 	checkpoints = []
-	print("SongSettings: Empty checkpoints array initialized. Use import_audacity_labels() to load from Audacity.")
+	# rint("SongSettings: Empty checkpoints array initialized. Use import_audacity_labels() to load from Audacity.")
 
 func update_sync(current_time: float):
 	"""Call this every frame with the current audio playback time"""
+	print("DEBUG: update_sync called with time: %.2fs" % current_time)
+	
 	if not audio_manager or not audio_manager.playing:
+		print("DEBUG: update_sync - Audio not playing, returning")
 		return
 	
+	print("DEBUG: update_sync - About to check checkpoints")
 	# Check if we've reached a new checkpoint
 	check_for_checkpoint_triggers(current_time)
 	
@@ -67,12 +77,27 @@ func update_sync(current_time: float):
 
 func check_for_checkpoint_triggers(current_time: float):
 	"""Check if we need to trigger a new checkpoint transition"""
+	print("DEBUG: check_for_checkpoint_triggers called - time: %.2fs, checkpoints: %d" % [current_time, checkpoints.size()])
+	
+	if checkpoints.size() == 0:
+		print("DEBUG: No checkpoints to check")
+		return
+	
 	for i in range(checkpoints.size()):
 		var checkpoint = checkpoints[i]
 		var timestamp = checkpoint.timestamp
+		var time_diff = abs(current_time - timestamp)
 		
-		# Check if we've just passed this checkpoint (within 0.1 seconds)
-		if abs(current_time - timestamp) < 0.1 and i != current_checkpoint_index:
+		# More generous detection - check if we're passing through the checkpoint
+		var is_near = time_diff < 0.2  # Increased from 0.1 to 0.2 seconds
+		var is_new = i != current_checkpoint_index
+		
+		print("DEBUG: Checkpoint %d: %.2fs vs %.2fs (diff: %.3f, near: %s, new: %s)" % [
+			i, current_time, timestamp, time_diff, is_near, is_new
+		])
+		
+		if is_near and is_new:
+			print("DEBUG: CHECKPOINT HIT! Index: %d, Name: %s" % [i, checkpoint.name])
 			current_checkpoint_index = i
 			checkpoint_reached.emit(timestamp, checkpoint.name)
 			break
@@ -301,6 +326,13 @@ func import_audacity_labels(file_path: String, default_transition_duration: floa
 		is_transitioning = false
 		
 		print("SongSettings: Successfully imported %d checkpoints from Audacity labels" % checkpoints.size())
+		
+		# DEBUG: Print first few checkpoints to see their structure
+		print("DEBUG: First 5 checkpoints:")
+		for i in range(min(5, checkpoints.size())):
+			var cp = checkpoints[i]
+			print("  %d: %.2fs - '%s'" % [i, cp.timestamp, cp.name])
+		
 		return true
 	else:
 		print("SongSettings: No valid checkpoints found in labels file")
@@ -573,14 +605,18 @@ func get_status_text() -> String:
 
 func list_all_checkpoints():
 	"""Print all checkpoints for debugging"""
-	print("SongSettings: All checkpoints:")
-	for i in range(checkpoints.size()):
-		var cp = checkpoints[i]
-		print("  %d. %.1fs - %s (transition: %.1fs)" % [i, cp.timestamp, cp.name, cp.transition_duration])
+	#print("SongSettings: All checkpoints:")
+	#for i in range(checkpoints.size()):
+		#var cp = checkpoints[i]
+		#print("  %d. %.1fs - %s (transition: %.1fs)" % [i, cp.timestamp, cp.name, cp.transition_duration])
 
-# Call this from CanvasManager._process(delta) to keep sync active
 func process_song_sync(delta: float):
 	"""Call this every frame to maintain song synchronization"""
+	# print("DEBUG: process_song_sync - this SongSettings ID: %s, checkpoints: %d" % [str(get_instance_id()), checkpoints.size()])
+	
 	if audio_manager and audio_manager.playing:
 		var current_time = audio_manager.get_playback_position()
+		# print("DEBUG: process_song_sync - Audio time: %.2fs, calling update_sync" % current_time)
 		update_sync(current_time)
+	# else:
+	# 	print("DEBUG: process_song_sync - Audio not playing or manager missing")

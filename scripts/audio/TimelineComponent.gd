@@ -128,9 +128,9 @@ func draw_time_markers():
 		
 		# Draw marker line - SAME PATTERN AS CHECKPOINTS
 		draw_line(
-			Vector2(x_pos, timeline_rect.position.y - 5),
+			Vector2(x_pos, timeline_rect.position.y - 4),
 			Vector2(x_pos, timeline_rect.position.y + timeline_rect.size.y),
-			Color.WHITE,  # Simple white color
+			Color.SLATE_GRAY,  # Simple white color
 			2.0
 		)
 
@@ -147,7 +147,7 @@ func draw_checkpoint_markers():
 			continue
 		
 		var x_pos = timeline_rect.position.x + (timestamp / song_duration) * timeline_width
-		var marker_y = timeline_rect.position.y - 15
+		var marker_y = timeline_rect.position.y + 10 
 		
 		# Draw checkpoint diamond/triangle
 		var points = PackedVector2Array([
@@ -155,7 +155,7 @@ func draw_checkpoint_markers():
 			Vector2(x_pos - 5, marker_y - 8),
 			Vector2(x_pos + 5, marker_y - 8)
 		])
-		draw_colored_polygon(points, checkpoint_color)
+		
 		
 		# Draw checkpoint name on hover (we'll implement hover detection later)
 		# For now, just draw a small dot
@@ -181,7 +181,7 @@ func draw_playhead():
 	
 	# Draw playhead handle (circle at top)
 	draw_circle(Vector2(x_pos, timeline_rect.position.y - 5), 6, playhead_color)
-	draw_circle(Vector2(x_pos, timeline_rect.position.y - 5), 4, Color.BLACK)
+	draw_circle(Vector2(x_pos, timeline_rect.position.y - 5), 4, Color(0.0, 0.0, 0.0, 0.96))
 
 func draw_time_text():
 	"""Draw current time and duration - IMPROVED"""

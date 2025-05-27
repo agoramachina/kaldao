@@ -22,7 +22,8 @@ var parameters = {
 	"path_stability": {"min": -1.0, "max": 1.0, "current": 1.0, "step": 0.05, "description": "Path Stability"},
 	"path_skew": {"min": -3.0, "max": 3.0, "current": 1.0, "step": 0.1, "description": "Path Skew"},
 	"color_speed": {"min": 0.0, "max": 2.0, "current": 0.5, "step": 0.1, "description": "Color Speed"},
-	"color_palette": {"min": 0, "max": 6, "current": 0, "step": 1, "description": "Color Palette"}
+	"color_palette": {"min": 0, "max": 6, "current": 0, "step": 1, "description": "Color Palette"},
+	"invert_colors": {"min": 0.0, "max": 1.0, "current": 0.0, "step": 1.0, "description": "Invert Colors"} 
 }
 
 # Default values for resetting - ENSURE kaleidoscope_segments is even
@@ -41,7 +42,8 @@ var default_values = {
 	"path_skew": 1.0,
 	"color_speed": 0.5,
 	"plane_rotation_speed": 0.5,
-	"color_palette": 0
+	"color_palette": 0,
+	"invert_colors": 0.0
 }
 
 var current_param_index = 0
@@ -55,7 +57,7 @@ var paused_values = {}
 var speed_parameters = ["fly_speed", "rotation_speed", "color_speed", "plane_rotation_speed"]
 
 # Color-related parameters that should NOT be randomized by the "." key
-var color_parameters = ["color_intensity", "color_speed", "color_palette"]
+var color_parameters = ["color_intensity", "color_speed", "color_palette", "invert_colors"]
 
 func _init():
 	param_names = parameters.keys()
@@ -97,6 +99,9 @@ func increase_current_parameter():
 	if param_name == "color_palette":
 		# Handle color palette cycling in ColorPaletteManager instead
 		return
+	elif param_name == "invert_colors":
+		# Handle boolean toggle for color inversion
+		param["current"] = 1.0 if param["current"] == 0.0 else 0.0
 	elif param_name == "kaleidoscope_segments":
 		# PROTECTED: Always step by 2 and ensure even values
 		var new_value = param["current"] + 2.0
@@ -115,6 +120,9 @@ func decrease_current_parameter():
 	if param_name == "color_palette":
 		# Handle color palette cycling in ColorPaletteManager instead
 		return
+	elif param_name == "invert_colors":
+		# Handle boolean toggle for color inversion
+		param["current"] = 1.0 if param["current"] == 0.0 else 0.0
 	elif param_name == "kaleidoscope_segments":
 		# PROTECTED: Always step by 2 and ensure even values
 		var new_value = param["current"] - 2.0
@@ -245,12 +253,19 @@ func get_current_parameter_name() -> String:
 	return param_names[current_param_index]
 
 func get_current_parameter_display() -> String:
+	"""Get display text for current parameter with special handling for invert_colors"""
 	var param_name = param_names[current_param_index]
 	var param = parameters[param_name]
 	
 	if param_name == "color_palette":
 		# Special display for color palette - will be handled by ColorPaletteManager
 		return ""
+	elif param_name == "invert_colors":
+		# Special display for boolean parameter
+		var status = "ON" if param["current"] > 0.5 else "OFF"
+		return "%s: %s\n[↑/↓] toggle\n[←/→] change parameter [r] reset [R] reset all" % [
+			param["description"], status
+		]
 	else:
 		return "%s: %.2f\n[↑/↓] adjust (%.2f to %.2f, step: %.2f)\n[←/→] change parameter [r] reset [R] reset all" % [
 			param["description"], 
@@ -307,7 +322,7 @@ func set_parameter_value(param_name: String, value: float):
 		# PROTECTED: Special handling for kaleidoscope_segments
 		if param_name == "kaleidoscope_segments":
 			value = ensure_kaleidoscope_even(value)
-			print("ParameterManager: Set kaleidoscope_segments to protected value: %.0f" % value)
+			# print("ParameterManager: Set kaleidoscope_segments to protected value: %.0f" % value)
 		
 		parameters[param_name]["current"] = value
 		parameter_changed.emit(param_name, value)

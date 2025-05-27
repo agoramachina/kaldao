@@ -11,6 +11,7 @@ signal reset_current_requested
 signal reset_all_requested
 signal colors_randomize_requested
 signal colors_reset_bw_requested
+signal colors_toggle_invert_requested
 signal randomize_parameters_requested
 signal audio_playback_toggle_requested
 signal audio_reactive_toggle_requested
@@ -127,7 +128,10 @@ func handle_input(event: InputEvent) -> bool:
 			if event.ctrl_pressed:
 				print("DEBUG: Ctrl+I - import labels")
 				import_labels_requested.emit()
-				return true
+			else:
+				print("DEBUG: I - toggle color invert")
+				colors_toggle_invert_requested.emit()
+			return true
 		
 		# Jump to checkpoints		
 		KEY_BRACKETLEFT:  # "[" key

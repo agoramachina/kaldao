@@ -20,7 +20,12 @@ var accumulated_rotation = 0.0  # Accumulated rotation angle
 var accumulated_plane_rotation = 0.0  # Accumulated plane rotation angle
 var accumulated_color_time = 0.0  # Accumulated color cycling time
 
+# Store original palette data to avoid re-fetching
+var current_original_palette: Dictionary = {}
+
 var song_settings: SongSettings
+var current_popup_label: RichTextLabel = null
+var current_popup_background: ColorRect = null
 
 func _ready():
 	# Initialize shader material
@@ -41,37 +46,40 @@ func _ready():
 	anchor_right = 1.0
 	anchor_bottom = 1.0
 	
-	# Load custom song settings
-	song_settings = SongSettings.new()
-	song_settings.connect_managers(parameter_manager, color_palette_manager, audio_manager)
-
-	song_settings.import_audacity_labels("res://assets/Lyrics.txt")
-	# song_settings.import_audacity_labels("res://assets/Beats.txt")
-	
-	song_settings.checkpoint_reached.connect(on_checkpoint_reached)
-	
-	
 	# Connect components
 	connect_components()
 	
 	# Setup audio
 	setup_audio_manager()
 	
+	# Load custom song settings
+	song_settings = SongSettings.new()
+	print("DEBUG: Created song_settings with ID: %s" % str(song_settings.get_instance_id()))
+
+	song_settings.connect_managers(parameter_manager, color_palette_manager, audio_manager)
+	
+	import_labels()
+	print("DEBUG: After import - song_settings ID: %s, checkpoints: %d" % [str(song_settings.get_instance_id()), song_settings.checkpoints.size()])
+	
+	song_settings.checkpoint_reached.connect(on_checkpoint_reached)
+	print("DEBUG: CanvasManager._ready() finished - final song_settings ID: %s" % str(song_settings.get_instance_id()))
+
 	# Initial setup
 	shader_controller.update_all_parameters(parameter_manager.get_all_parameters())
 	color_palette_manager.emit_current_palette()
-	
-
 
 func import_labels():
+	print("DEBUG: import_labels() called")
 	var success = song_settings.import_audacity_labels("res://assets/Lyrics.txt")
 	if success:
+		print("DEBUG: import_labels - checkpoints after import: %d" % song_settings.checkpoints.size())
 		update_text.emit("Imported %d checkpoints from labels" % song_settings.checkpoints.size())
 	else:
 		update_text.emit("Failed to import labels")
 		
 func on_checkpoint_reached(timestamp: float, checkpoint_name: String):
 	"""Called when we reach a checkpoint during playback"""
+	print("DEBUG: on_checkpoint_reached - Time: %.2fs, Name: '%s'" % [timestamp, checkpoint_name])
 	show_checkpoint_popup(checkpoint_name)
 		
 func jump_to_previous_checkpoint():
@@ -99,17 +107,23 @@ func jump_to_previous_checkpoint():
 		update_text.emit("◀ Jumped to beginning")
 
 func jump_to_next_checkpoint():
+	print("DEBUG: jump_to_next_checkpoint called")
 	if not song_settings or not audio_manager:
 		update_text.emit("Song settings or audio not available")
 		return
 	
 	var current_time = audio_manager.get_playback_position()
+	print("DEBUG: Current time: %.2fs, Total checkpoints: %d" % [current_time, song_settings.checkpoints.size()])
+	
 	var target_checkpoint = null
 	
 	# Find the next checkpoint (after current time)
-	for checkpoint in song_settings.checkpoints:
+	for i in range(song_settings.checkpoints.size()):
+		var checkpoint = song_settings.checkpoints[i]
+		print("DEBUG: Checking checkpoint %d: %.2fs - '%s'" % [i, checkpoint.timestamp, checkpoint.name])
 		if checkpoint.timestamp > current_time + 0.5:  # 0.5s buffer
 			target_checkpoint = checkpoint
+			print("DEBUG: Found next checkpoint: %.2fs - '%s'" % [checkpoint.timestamp, checkpoint.name])
 			break
 	
 	if target_checkpoint:
@@ -117,37 +131,75 @@ func jump_to_next_checkpoint():
 		show_checkpoint_popup(target_checkpoint.name)
 		update_text.emit("▶ %.1fs - %s" % [target_checkpoint.timestamp, target_checkpoint.name])
 	else:
+		print("DEBUG: No checkpoint found after time %.2fs" % (current_time + 0.5))
 		update_text.emit("▶ No more checkpoints ahead")
 		
 func show_checkpoint_popup(checkpoint_text: String):
 	"""Show a popup with the checkpoint text"""
+	print("DEBUG: Checkpoint '%s'" % checkpoint_text)
+	
+	# Remove any existing popup first
+	if current_popup_label:
+		current_popup_label.queue_free()
+		current_popup_label = null
+	if current_popup_background:
+		current_popup_background.queue_free()
+		current_popup_background = null
+	
 	# Create a temporary label for the popup
 	var popup_label = RichTextLabel.new()
 	popup_label.text = checkpoint_text
 	popup_label.bbcode_enabled = false
 	popup_label.add_theme_color_override("default_color", Color.WHITE)
+	popup_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	
-	# Position it where the purple line is (center of screen)
-	var viewport_size = get_viewport().get_visible_rect().size
-	popup_label.position = Vector2(viewport_size.x / 2 - 100, viewport_size.y / 2)
-	popup_label.size = Vector2(200, 50)
-	
-	# Style the popup
-	popup_label.add_theme_color_override("font_shadow_color", Color.BLACK)
-	var background = ColorRect.new()
-	background.color = Color(0.5, 0.0, 0.5, 0.8)  # Purple background
-	background.position = popup_label.position - Vector2(10, 10)
-	background.size = popup_label.size + Vector2(20, 20)
-	
-	# Add to scene
-	add_child(background)
+	# Add to scene first so we can measure it
 	add_child(popup_label)
 	
-	# Auto-remove after 2 seconds
+	# Wait one frame for the label to calculate its content size
+	await get_tree().process_frame
+	
+	# Get the actual content size
+	var content_size = popup_label.get_content_height()
+	var text_width = popup_label.get_theme_font("normal_font").get_string_size(
+		checkpoint_text, 
+		HORIZONTAL_ALIGNMENT_LEFT, 
+		-1, 
+		popup_label.get_theme_font_size("normal_font_size")
+	).x
+	
+	# Set label size to fit content with some padding
+	var padding = Vector2(20, 10)
+	popup_label.size = Vector2(text_width + padding.x, content_size + padding.y)
+	
+	# Position at bottom center of screen
+	var viewport_size = get_viewport().get_visible_rect().size
+	popup_label.position = Vector2(
+		viewport_size.x / 2 - popup_label.size.x / 2,
+		viewport_size.y - 50 - popup_label.size.y
+	)
+	
+	# Create background sized to match label
+	var background = ColorRect.new()
+	background.color = Color(0.0, 0.0, 0.0, 0.8)
+	background.position = popup_label.position
+	background.size = popup_label.size
+	
+	# Add background behind the label
+	add_child(background)
+	move_child(background, popup_label.get_index())
+	
+	# Store references to current popup
+	current_popup_label = popup_label
+	current_popup_background = background
+	
+	# Auto-remove after 2 seconds (but only if it's still the current popup)
 	await get_tree().create_timer(2.0).timeout
-	background.queue_free()
-	popup_label.queue_free()
-
+	if current_popup_label == popup_label:  # Only remove if this is still the current popup
+		current_popup_label.queue_free()
+		current_popup_background.queue_free()
+		current_popup_label = null
+		current_popup_background = null
 func on_timeline_seek(timestamp: float):
 	if audio_manager:
 		audio_manager.seek(timestamp)
@@ -173,7 +225,8 @@ func connect_components():
 	parameter_manager.parameter_changed.connect(shader_controller.update_parameter)
 	
 	# Connect color palette manager
-	color_palette_manager.palette_changed.connect(shader_controller.update_color_palette)
+	color_palette_manager.palette_changed.connect(_on_palette_changed)
+	color_palette_manager.invert_changed.connect(_on_invert_changed)
 	
 	# Connect screenshot manager
 	screenshot_manager.screenshot_taken.connect(on_screenshot_taken)
@@ -204,17 +257,17 @@ func setup_audio_manager():
 
 func on_bass_detected(intensity: float):
 	# Optional visual feedback
-	if intensity > 0.01:
+	if intensity > 999.01:
 		print("DEBUG: Bass detected: %.3f" % intensity)
 
 func on_mid_detected(intensity: float):
 	# Optional visual feedback
-	if intensity > 0.01:
+	if intensity > 999.01:
 		print("DEBUG: Mid detected: %.3f" % intensity)
 
 func on_treble_detected(intensity: float):
 	# Optional visual feedback
-	if intensity > 0.01:
+	if intensity > 999.01:
 		print("DEBUG: Treble detected: %.3f" % intensity)
 
 func on_beat_detected():
@@ -496,6 +549,74 @@ func export_audacity_labels():
 		var absolute_path = ProjectSettings.globalize_path(file_path)
 		update_text.emit("Exported labels to: %s" % absolute_path)
 
+func toggle_color_invert():
+	"""Toggle color inversion for any palette"""
+	print("DEBUG: toggle_color_invert called")
+	color_palette_manager.toggle_invert()
+	var palette_name = color_palette_manager.get_current_palette_name()
+	update_text.emit("Color Invert Toggled\n%s" % palette_name)
+	
+# Handle invert changes (simple shader inversion for everything)
+func _on_invert_changed(should_invert: bool):
+	"""Handle invert toggle - simple shader inversion for all palettes"""
+	print("DEBUG: _on_invert_changed called with: ", should_invert)
+	
+	if not shader_material:
+		print("DEBUG: ERROR - No shader_material available!")
+		return
+	
+	# Use simple shader inversion for everything (B&W and color palettes)
+	shader_material.set_shader_parameter("invert_colors", should_invert)
+	print("DEBUG: Shader inversion set to: ", should_invert)
+
+# Helper function to apply palette to shader
+func _apply_palette_to_shader(palette_data: Dictionary, use_palette: bool, should_invert: bool):
+	"""Apply palette to shader with optional inversion"""
+	if not shader_material:
+		return
+	
+	var final_a = palette_data["a"]
+	var final_b = palette_data["b"]
+	var final_c = palette_data["c"] 
+	var final_d = palette_data["d"]
+	
+	if use_palette and should_invert:
+		# Invert color palette coefficients
+		final_a = Vector3(1.0, 1.0, 1.0) - final_a
+		final_b = -final_b
+		shader_material.set_shader_parameter("invert_colors", false)
+		print("DEBUG: Applied inverted color palette")
+	elif not use_palette and should_invert:
+		# B&W inversion via shader
+		shader_material.set_shader_parameter("invert_colors", true)
+		print("DEBUG: Applied B&W inversion via shader")
+	else:
+		# Normal palette or B&W
+		shader_material.set_shader_parameter("invert_colors", false)
+		print("DEBUG: Applied normal palette")
+	
+	# Set all shader parameters
+	shader_material.set_shader_parameter("use_color_palette", use_palette)
+	shader_material.set_shader_parameter("palette_a", final_a)
+	shader_material.set_shader_parameter("palette_b", final_b)
+	shader_material.set_shader_parameter("palette_c", final_c)
+	shader_material.set_shader_parameter("palette_d", final_d)
+
+# Handle palette changes (just apply normally)
+func _on_palette_changed(palette_data: Dictionary, use_palette: bool):
+	"""Handle color palette changes"""
+	if not shader_material:
+		return
+	
+	# Just apply the palette normally - inversion handled separately
+	shader_material.set_shader_parameter("use_color_palette", use_palette)
+	shader_material.set_shader_parameter("palette_a", palette_data["a"])
+	shader_material.set_shader_parameter("palette_b", palette_data["b"])
+	shader_material.set_shader_parameter("palette_c", palette_data["c"])
+	shader_material.set_shader_parameter("palette_d", palette_data["d"])
+	
+	print("DEBUG: Applied palette: ", palette_data["name"] if "name" in palette_data else "Custom")
+	
 func _process(delta):
 	# Update camera position based on fly_speed
 	var current_fly_speed = parameter_manager.get_parameter_value("fly_speed")
@@ -516,3 +637,6 @@ func _process(delta):
 	shader_controller.update_parameter("rotation_time", accumulated_rotation)
 	shader_controller.update_parameter("plane_rotation_time", accumulated_plane_rotation)
 	shader_controller.update_parameter("color_time", accumulated_color_time)
+	
+	if song_settings:
+		song_settings.process_song_sync(delta)

@@ -58,7 +58,7 @@ var parameter_manager: ParameterManager
 var base_values = {}
 
 # Debug control
-var debug_audio_levels = true
+var debug_audio_levels = false
 var debug_frame_counter = 0
 var debug_print_interval = 30       # Print debug every 30 frames (0.5 seconds at 60fps)
 
@@ -86,6 +86,8 @@ func load_audio_file():
 	else:
 		print("AudioManager: ERROR - Could not load audio file: %s" % audio_file_path)
 		print("  Make sure the file exists and is a supported audio format (.wav, .ogg)")
+
+
 
 func setup_spectrum_analyzer():
 	"""Setup spectrum analyzer on Master bus for audio analysis"""
@@ -401,14 +403,14 @@ func detect_beats():
 		if beat_detected_recent: detection_method += "RECENT "
 		if beat_detected_variance: detection_method += "VARIANCE "
 		
-		print("AudioManager: BEAT [%s]! Intensity: %.2f, Bass: %.3f vs Avg: %.3f/%.3f, Segments: %.0f" % [
-			detection_method.strip_edges(), 
-			current_bass / max(overall_avg, 0.01), 
-			current_bass, 
-			overall_avg, 
-			recent_avg, 
-			parameter_manager.get_parameter_value("kaleidoscope_segments") if parameter_manager else 0
-		])
+		#print("AudioManager: BEAT [%s]! Intensity: %.2f, Bass: %.3f vs Avg: %.3f/%.3f, Segments: %.0f" % [
+			#detection_method.strip_edges(), 
+			#current_bass / max(overall_avg, 0.01), 
+			#current_bass, 
+			#overall_avg, 
+			#recent_avg, 
+			#parameter_manager.get_parameter_value("kaleidoscope_segments") if parameter_manager else 0
+		#])
 
 func _process_beat_effects(delta):
 	"""Enhanced beat effect handling with proper segment restoration"""

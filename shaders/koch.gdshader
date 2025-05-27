@@ -37,6 +37,9 @@ uniform vec3 palette_b = vec3(0.5, 0.5, 0.5);
 uniform vec3 palette_c = vec3(1.0, 1.0, 1.0);
 uniform vec3 palette_d = vec3(0.0, 0.33, 0.67);
 
+// Invert color functionality
+uniform bool invert_colors = false;        // Enable color inversion
+
 // ====================
 // UTILITY FUNCTIONS
 // ====================
@@ -256,25 +259,34 @@ vec3 effect(vec2 p, vec2 q) {
     return col;
 }
 
+// Then modify the postProcess function:
 vec3 postProcess(vec3 col, vec2 q) {
-    // Tone mapping and gamma correction
+    if (use_color_palette) {
+        float t = length(col) + color_time;
+        col = palette(t) * length(col);
+    }
+
     col = clamp(col, 0.0, 1.0);
     col = pow(col, vec3(1.0 / 2.2));
-    
-    // Subtle vignette effect
-    float vignette = 0.3 + 0.7 * pow(16.0 * q.x * q.y * (1.0 - q.x) * (1.0 - q.y), 0.3);
-    col *= vignette;
-    
-    return col;
+    col = col * 0.6 + 0.4 * col * col * (3.0 - 2.0 * col);
+    col = mix(col, vec3(dot(col, vec3(0.33))), -0.4);
+    col *= 0.5 + 0.5 * pow(19.0 * q.x * q.y * (1.0 - q.x) * (1.0 - q.y), 0.7);
+
+    return col * color_intensity;
 }
 
 void fragment() {
     vec2 q = FRAGCOORD.xy / (1.0 / SCREEN_PIXEL_SIZE).xy;
     vec2 p = -1.0 + 2.0 * q;
     p.x *= (1.0 / SCREEN_PIXEL_SIZE).x / (1.0 / SCREEN_PIXEL_SIZE).y;
-    
+
     vec3 col = effect(p, q);
     col = postProcess(col, q);
     
+    // Apply inversion at the VERY END - true mathematical inversion
+    if (invert_colors) {
+        col = vec3(1.0) - col;
+    }
+
     COLOR = vec4(col, 1.0);
 }
