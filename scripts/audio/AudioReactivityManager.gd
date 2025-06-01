@@ -15,7 +15,7 @@ var current_treble_influence = 0.0
 var smoothing_factor = 0.15
 
 # Intensity multipliers
-var bass_pulse_intensity = 5.5
+var bass_pulse_intensity = 0.5
 var mid_rotation_intensity = 1.0
 var treble_zoom_intensity = 0.8
 
@@ -82,7 +82,7 @@ func on_bass_detected(intensity: float):
 	
 	# Bass affects truchet radius (center circle pulsing)
 	var base_radius = base_values.get("truchet_radius", 0.35)
-	var pulse_amount = current_bass_influence * bass_pulse_intensity * 0.15
+	var pulse_amount = current_bass_influence * bass_pulse_intensity * 0.5
 	var new_radius = clamp(base_radius + pulse_amount, 0.1, 0.8)
 	parameter_manager.set_parameter_value("truchet_radius", new_radius)
 	
