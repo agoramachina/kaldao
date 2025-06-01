@@ -1,3 +1,5 @@
+Kaldao is a fractal animation program written in Godot, based off of doa's [Kaleidoscope Godot shader](https://godotshaders.com/shader/kaleidoscope/) which is based off of mrange's [Truchet + Kaleidoscope FTW shadertoy shader](https://www.shadertoy.com/view/7lKSWW). 
+
 # Kaldao Project Technical Overview
 
 ## Architecture Summary
