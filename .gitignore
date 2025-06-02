@@ -36,7 +36,6 @@ data/screenshots/*
 # Build and export files
 builds/
 exports/
-web/
 *.pck
 *.exe
 *.dmg

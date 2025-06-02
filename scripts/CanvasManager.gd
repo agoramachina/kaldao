@@ -135,8 +135,8 @@ func jump_to_next_checkpoint():
 		update_text.emit("▶ No more checkpoints ahead")
 		
 func show_checkpoint_popup(checkpoint_text: String):
-	"""Show a popup with the checkpoint text"""
-	print("DEBUG: Checkpoint '%s'" % checkpoint_text)
+	# """Show a popup with the checkpoint text"""
+	# print("DEBUG: Checkpoint '%s'" % checkpoint_text)
 	
 	# Remove any existing popup first
 	if current_popup_label:

@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kaldao Fractal Visualizer - Debug</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+        }
+
+        #canvas {
+            display: block;
+        }
+
+        .debug-info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            max-width: 500px;
+        }
+
+        .controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 12px;
+        }
+
+        .error {
+            color: #ff4444;
+            background: rgba(255, 68, 68, 0.1);
+            border: 1px solid #ff4444;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+
+        .success {
+            color: #44ff44;
+            background: rgba(68, 255, 68, 0.1);
+            border: 1px solid #44ff44;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    
+    <div class="debug-info" id="debugInfo">
+        <h3>Kaldao Debug Console</h3>
+        <div id="status">Initializing...</div>
+        <div id="errors"></div>
+    </div>
+
+    <div class="controls">
+        <strong>TEST CONTROLS</strong><br>
+        Arrow Keys: Adjust parameters<br>
+        Space: Pause<br>
+        C: Change colors<br>
+        R: Reset<br>
+    </div>
+
+    <script>
+        console.log("Script starting...");
+        
+        // Global error handler
+        window.addEventListener('error', function(e) {
+            console.error('JavaScript Error:', e);
+            const errorDiv = document.getElementById('errors');
+            if (errorDiv) {
+                errorDiv.innerHTML += `<div class="error">
+                    <strong>Error at line ${e.lineno}:</strong><br>
+                    ${e.message}<br>
+                    <small>File: ${e.filename}</small>
+                </div>`;
+            }
+        });
+
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            if (statusDiv) {
+                const className = type === 'error' ? 'error' : (type === 'success' ? 'success' : '');
+                statusDiv.innerHTML = `<div class="${className}">${message}</div>`;
+            }
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        // Step 1: Test basic setup
+        updateStatus("Step 1: Testing basic JavaScript...");
+
+        // Declare gl in outer scope so resize handler can access it
+        let gl = null;
+        let canvas = null;
+
+        try {
+            // Step 2: Test WebGL
+            updateStatus("Step 2: Getting WebGL context...");
+            
+            canvas = document.getElementById('canvas');
+            if (!canvas) {
+                throw new Error("Canvas element not found");
+            }
+            
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+            if (!gl) {
+                throw new Error("WebGL not supported");
+            }
+            
+            updateStatus("Step 3: WebGL context created successfully", 'success');
+
+            // Step 3: Test shader compilation
+            updateStatus("Step 4: Testing shader compilation...");
+
+            const vertexShaderSource = `
+                attribute vec2 a_position;
+                void main() {
+                    gl_Position = vec4(a_position, 0.0, 1.0);
+                }
+            `;
+
+            const fragmentShaderSource = `
+                precision mediump float;
+                uniform vec2 u_resolution;
+                uniform float u_time;
+                uniform float u_fly_speed;
+                uniform float u_zoom_level;
+                uniform float u_rotation_speed;
+                uniform float u_kaleidoscope_segments;
+                uniform float u_truchet_radius;
+                uniform float u_color_intensity;
+                uniform float u_use_color_palette;
+                uniform vec3 u_palette_a;
+                uniform vec3 u_palette_b;
+                uniform vec3 u_palette_c;
+                uniform vec3 u_palette_d;
+                
+                #define PI 3.14159265359
+                
+                // Utility functions
+                mat2 rot(float a) {
+                    return mat2(cos(a), sin(a), -sin(a), cos(a));
+                }
+                
+                float hash(vec2 p) {
+                    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+                }
+                
+                vec3 palette(float t) {
+                    return u_palette_a + u_palette_b * cos(6.28318 * (u_palette_c * t + u_palette_d));
+                }
+                
+                // Simple kaleidoscope effect
+                vec2 kaleidoscope(vec2 p, float segments) {
+                    float angle = atan(p.y, p.x);
+                    float radius = length(p);
+                    
+                    float segmentAngle = 2.0 * PI / segments;
+                    angle = mod(angle, segmentAngle);
+                    
+                    if (angle > segmentAngle * 0.5) {
+                        angle = segmentAngle - angle;
+                    }
+                    
+                    return vec2(cos(angle), sin(angle)) * radius;
+                }
+                
+                // Simple truchet-like patterns
+                float truchetPattern(vec2 p, float radius) {
+                    vec2 cell = floor(p);
+                    vec2 local = fract(p) - 0.5;
+                    
+                    float h = hash(cell);
+                    
+                    // Rotate based on hash
+                    local = rot(h * 6.28318) * local;
+                    
+                    // Create circular patterns
+                    float dist = length(local);
+                    float pattern = smoothstep(radius - 0.05, radius + 0.05, dist);
+                    
+                    // Add some variety based on hash
+                    if (h > 0.5) {
+                        pattern = 1.0 - pattern;
+                    }
+                    
+                    return pattern;
+                }
+                
+                void main() {
+                    vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution.xy) / min(u_resolution.x, u_resolution.y);
+                    
+                    // Apply zoom
+                    uv /= u_zoom_level;
+                    
+                    // Apply rotation
+                    uv = rot(u_time * u_rotation_speed) * uv;
+                    
+                    // Apply kaleidoscope
+                    uv = kaleidoscope(uv, u_kaleidoscope_segments);
+                    
+                    // Add movement
+                    uv += vec2(u_time * u_fly_speed * 0.1);
+                    
+                    // Create truchet pattern
+                    float pattern = truchetPattern(uv * 4.0, u_truchet_radius);
+                    
+                    vec3 col;
+                    if (u_use_color_palette > 0.5) {
+                        col = palette(pattern + u_time * 0.1) * u_color_intensity;
+                    } else {
+                        col = vec3(pattern) * u_color_intensity;
+                    }
+                    
+                    gl_FragColor = vec4(col, 1.0);
+                }
+            `;
+
+            function createShader(gl, type, source) {
+                const shader = gl.createShader(type);
+                gl.shaderSource(shader, source);
+                gl.compileShader(shader);
+                
+                if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                    const error = gl.getShaderInfoLog(shader);
+                    gl.deleteShader(shader);
+                    throw new Error(`Shader compilation failed: ${error}`);
+                }
+                return shader;
+            }
+
+            function createProgram(gl, vertexShader, fragmentShader) {
+                const program = gl.createProgram();
+                gl.attachShader(program, vertexShader);
+                gl.attachShader(program, fragmentShader);
+                gl.linkProgram(program);
+                
+                if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                    const error = gl.getProgramInfoLog(program);
+                    gl.deleteProgram(program);
+                    throw new Error(`Program linking failed: ${error}`);
+                }
+                return program;
+            }
+
+            const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+            const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+            const program = createProgram(gl, vertexShader, fragmentShader);
+
+            updateStatus("Step 5: Shaders compiled successfully", 'success');
+
+            // Step 4: Setup geometry
+            const positionBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+                -1, -1,
+                 1, -1,
+                -1,  1,
+                 1,  1,
+            ]), gl.STATIC_DRAW);
+
+            const positionLocation = gl.getAttribLocation(program, 'a_position');
+            const resolutionLocation = gl.getUniformLocation(program, 'u_resolution');
+            const timeLocation = gl.getUniformLocation(program, 'u_time');
+            
+            // Kaldao uniform locations
+            const flySpeedLocation = gl.getUniformLocation(program, 'u_fly_speed');
+            const zoomLevelLocation = gl.getUniformLocation(program, 'u_zoom_level');
+            const rotationSpeedLocation = gl.getUniformLocation(program, 'u_rotation_speed');
+            const kaleidoscopeSegmentsLocation = gl.getUniformLocation(program, 'u_kaleidoscope_segments');
+            const truchetRadiusLocation = gl.getUniformLocation(program, 'u_truchet_radius');
+            const colorIntensityLocation = gl.getUniformLocation(program, 'u_color_intensity');
+            const useColorPaletteLocation = gl.getUniformLocation(program, 'u_use_color_palette');
+            const paletteALocation = gl.getUniformLocation(program, 'u_palette_a');
+            const paletteBLocation = gl.getUniformLocation(program, 'u_palette_b');
+            const paletteCLocation = gl.getUniformLocation(program, 'u_palette_c');
+            const paletteDLocation = gl.getUniformLocation(program, 'u_palette_d');
+
+            updateStatus("Step 6: Geometry setup complete", 'success');
+
+            // Step 5: Setup Kaldao parameters
+            const parameters = {
+                fly_speed: { value: 0.25, min: -3.0, max: 3.0, step: 0.1, name: "Fly Speed" },
+                zoom_level: { value: 0.3, min: 0.05, max: 2.0, step: 0.05, name: "Zoom Level" },
+                rotation_speed: { value: 0.025, min: -2.0, max: 2.0, step: 0.01, name: "Rotation Speed" },
+                kaleidoscope_segments: { value: 10.0, min: 4.0, max: 32.0, step: 2.0, name: "Kaleidoscope Segments" },
+                truchet_radius: { value: 0.35, min: 0.1, max: 0.8, step: 0.05, name: "Truchet Radius" },
+                color_intensity: { value: 1.0, min: 0.1, max: 3.0, step: 0.1, name: "Color Intensity" }
+            };
+
+            // Color palettes
+            const colorPalettes = [
+                { name: "B&W", a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [1.0, 1.0, 1.0], d: [0.0, 0.0, 0.0] },
+                { name: "Rainbow", a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [1.0, 1.0, 1.0], d: [0.0, 0.33, 0.67] },
+                { name: "Fire", a: [0.5, 0.2, 0.1], b: [0.5, 0.3, 0.2], c: [2.0, 1.0, 0.5], d: [0.0, 0.25, 0.5] },
+                { name: "Ocean", a: [0.2, 0.5, 0.8], b: [0.2, 0.3, 0.5], c: [1.0, 1.5, 2.0], d: [0.0, 0.2, 0.5] },
+                { name: "Purple", a: [0.8, 0.5, 0.4], b: [0.2, 0.4, 0.2], c: [2.0, 1.0, 1.0], d: [0.0, 0.25, 0.25] }
+            ];
+
+            let currentParameterIndex = 0;
+            let currentPaletteIndex = 0;
+            let useColorPalette = false;
+            let animationPaused = false;
+            
+            const parameterKeys = Object.keys(parameters);
+
+            function updateDisplay() {
+                const currentParamKey = parameterKeys[currentParameterIndex];
+                const currentParam = parameters[currentParamKey];
+                const palette = colorPalettes[currentPaletteIndex];
+                
+                updateStatus(`${currentParam.name}: ${currentParam.value.toFixed(3)} | Palette: ${palette.name}`, 'info');
+            }
+
+            function adjustParameter(delta) {
+                const paramKey = parameterKeys[currentParameterIndex];
+                const param = parameters[paramKey];
+                
+                param.value = Math.max(param.min, Math.min(param.max, param.value + delta * param.step));
+                
+                // Ensure kaleidoscope segments are even
+                if (paramKey === 'kaleidoscope_segments') {
+                    param.value = Math.round(param.value / 2) * 2;
+                }
+                
+                updateDisplay();
+            }
+
+            function switchParameter(delta) {
+                currentParameterIndex = (currentParameterIndex + delta + parameterKeys.length) % parameterKeys.length;
+                updateDisplay();
+            }
+
+            function cyclePalette() {
+                currentPaletteIndex = (currentPaletteIndex + 1) % colorPalettes.length;
+                useColorPalette = currentPaletteIndex > 0;
+                updateDisplay();
+            }
+
+            function resetCurrentParameter() {
+                const paramKey = parameterKeys[currentParameterIndex];
+                const param = parameters[paramKey];
+                
+                // Reset to sensible defaults
+                const defaults = {
+                    fly_speed: 0.25,
+                    zoom_level: 0.3,
+                    rotation_speed: 0.025,
+                    kaleidoscope_segments: 10.0,
+                    truchet_radius: 0.35,
+                    color_intensity: 1.0
+                };
+                
+                if (defaults[paramKey] !== undefined) {
+                    param.value = defaults[paramKey];
+                }
+                
+                updateDisplay();
+            }
+
+            // Step 6: Test input handling
+            document.addEventListener('keydown', function(e) {
+                try {
+                    switch(e.code) {
+                        case 'ArrowUp':
+                            e.preventDefault();
+                            adjustParameter(1);
+                            break;
+                        case 'ArrowDown':
+                            e.preventDefault();
+                            adjustParameter(-1);
+                            break;
+                        case 'ArrowLeft':
+                            e.preventDefault();
+                            switchParameter(-1);
+                            break;
+                        case 'ArrowRight':
+                            e.preventDefault();
+                            switchParameter(1);
+                            break;
+                        case 'Space':
+                            e.preventDefault();
+                            animationPaused = !animationPaused;
+                            updateStatus(`Animation: ${animationPaused ? 'PAUSED' : 'RUNNING'}`, 'info');
+                            break;
+                        case 'KeyC':
+                            e.preventDefault();
+                            cyclePalette();
+                            break;
+                        case 'KeyR':
+                            e.preventDefault();
+                            resetCurrentParameter();
+                            break;
+                    }
+                } catch (error) {
+                    updateStatus(`Input error: ${error.message}`, 'error');
+                }
+            });
+
+            updateStatus("Step 7: Input handling setup", 'success');
+
+            // Step 7: Render loop
+            let startTime = performance.now();
+            
+            function render(time) {
+                try {
+                    const currentTime = (time - startTime) * 0.001; // Convert to seconds
+
+                    gl.viewport(0, 0, canvas.width, canvas.height);
+                    gl.useProgram(program);
+                    
+                    gl.enableVertexAttribArray(positionLocation);
+                    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+                    gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+                    
+                    // Set basic uniforms
+                    gl.uniform2f(resolutionLocation, canvas.width, canvas.height);
+                    gl.uniform1f(timeLocation, animationPaused ? 0 : currentTime);
+                    
+                    // Set Kaldao uniforms
+                    gl.uniform1f(flySpeedLocation, parameters.fly_speed.value);
+                    gl.uniform1f(zoomLevelLocation, parameters.zoom_level.value);
+                    gl.uniform1f(rotationSpeedLocation, parameters.rotation_speed.value);
+                    gl.uniform1f(kaleidoscopeSegmentsLocation, parameters.kaleidoscope_segments.value);
+                    gl.uniform1f(truchetRadiusLocation, parameters.truchet_radius.value);
+                    gl.uniform1f(colorIntensityLocation, parameters.color_intensity.value);
+                    gl.uniform1f(useColorPaletteLocation, useColorPalette ? 1.0 : 0.0);
+                    
+                    // Set color palette
+                    const palette = colorPalettes[currentPaletteIndex];
+                    gl.uniform3f(paletteALocation, palette.a[0], palette.a[1], palette.a[2]);
+                    gl.uniform3f(paletteBLocation, palette.b[0], palette.b[1], palette.b[2]);
+                    gl.uniform3f(paletteCLocation, palette.c[0], palette.c[1], palette.c[2]);
+                    gl.uniform3f(paletteDLocation, palette.d[0], palette.d[1], palette.d[2]);
+                    
+                    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                    
+                    requestAnimationFrame(render);
+                } catch (error) {
+                    updateStatus(`Render error: ${error.message}`, 'error');
+                }
+            }
+
+            updateStatus("Step 8: Starting render loop...", 'success');
+            updateDisplay();
+            requestAnimationFrame(render);
+
+            updateStatus("🎉 ALL TESTS PASSED! Basic WebGL app working!", 'success');
+
+        } catch (error) {
+            updateStatus(`❌ Error in step: ${error.message}`, 'error');
+            console.error('Setup error:', error);
+        }
+
+        // Window resize handler
+        window.addEventListener('resize', function() {
+            try {
+                if (canvas && gl) {
+                    canvas.width = window.innerWidth;
+                    canvas.height = window.innerHeight;
+                    gl.viewport(0, 0, canvas.width, canvas.height);
+                }
+            } catch (error) {
+                updateStatus(`Resize error: ${error.message}`, 'error');
+            }
+        });
+
+        console.log("Script completed successfully");
+    </script>
+</body>
+</html>

@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kaldao Fractal Visualizer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        .controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 8px;
+            min-width: 300px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .parameter-group {
+            margin-bottom: 20px;
+        }
+
+        .parameter-group h3 {
+            color: #ff6b9d;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 5px;
+        }
+
+        .parameter {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            padding: 5px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+        }
+
+        .parameter label {
+            flex: 1;
+            font-size: 12px;
+        }
+
+        .parameter input[type="range"] {
+            flex: 2;
+            margin: 0 10px;
+        }
+
+        .parameter .value {
+            flex: 0 0 60px;
+            text-align: right;
+            font-size: 11px;
+            color: #aaa;
+        }
+
+        .audio-controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .audio-controls button {
+            background: #ff6b9d;
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+
+        .audio-controls button:hover {
+            background: #ff8fb3;
+        }
+
+        .audio-controls button.active {
+            background: #4ecdc4;
+        }
+
+        .timeline {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 8px;
+            width: 400px;
+        }
+
+        .timeline-bar {
+            width: 100%;
+            height: 8px;
+            background: #333;
+            border-radius: 4px;
+            position: relative;
+            cursor: pointer;
+            margin: 10px 0;
+        }
+
+        .timeline-progress {
+            height: 100%;
+            background: linear-gradient(90deg, #ff6b9d, #4ecdc4);
+            border-radius: 4px;
+            width: 0%;
+            transition: width 0.1s ease;
+        }
+
+        .timeline-handle {
+            position: absolute;
+            top: -4px;
+            width: 16px;
+            height: 16px;
+            background: white;
+            border-radius: 50%;
+            cursor: grab;
+            transform: translateX(-50%);
+        }
+
+        .preset-buttons {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 10;
+        }
+
+        .preset-buttons button {
+            background: rgba(78, 205, 196, 0.8);
+            border: none;
+            color: white;
+            padding: 10px 15px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+
+        .preset-buttons button:hover {
+            background: rgba(78, 205, 196, 1);
+        }
+
+        .info-panel {
+            position: absolute;
+            top: 50%;
+            right: 20px;
+            transform: translateY(-50%);
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 11px;
+            max-width: 200px;
+        }
+
+        @media (max-width: 768px) {
+            .controls, .audio-controls, .timeline, .info-panel {
+                position: relative;
+                margin: 10px;
+                width: calc(100% - 20px);
+            }
+            
+            body {
+                overflow-y: auto;
+            }
+            
+            #canvas {
+                position: relative;
+                height: 50vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    
+    <div class="controls">
+        <h2>🌀 Kaldao Controls</h2>
+        
+        <div class="parameter-group">
+            <h3>Movement</h3>
+            <div class="parameter">
+                <label>Fly Speed</label>
+                <input type="range" id="flySpeed" min="-3" max="3" step="0.1" value="0.25">
+                <span class="value">0.25</span>
+            </div>
+            <div class="parameter">
+                <label>Rotation Speed</label>
+                <input type="range" id="rotationSpeed" min="-6" max="6" step="0.01" value="0.025">
+                <span class="value">0.025</span>
+            </div>
+            <div class="parameter">
+                <label>Zoom Level</label>
+                <input type="range" id="zoomLevel" min="0.05" max="5" step="0.05" value="0.3">
+                <span class="value">0.3</span>
+            </div>
+        </div>
+
+        <div class="parameter-group">
+            <h3>Pattern</h3>
+            <div class="parameter">
+                <label>Kaleidoscope Segments</label>
+                <input type="range" id="kaleidoscopeSegments" min="4" max="80" step="2" value="10">
+                <span class="value">10</span>
+            </div>
+            <div class="parameter">
+                <label>Truchet Radius</label>
+                <input type="range" id="truchetRadius" min="0.1" max="0.9" step="0.01" value="0.35">
+                <span class="value">0.35</span>
+            </div>
+            <div class="parameter">
+                <label>Contrast</label>
+                <input type="range" id="contrast" min="0.1" max="5" step="0.1" value="1.0">
+                <span class="value">1.0</span>
+            </div>
+        </div>
+
+        <div class="parameter-group">
+            <h3>Color</h3>
+            <div class="parameter">
+                <label>Color Intensity</label>
+                <input type="range" id="colorIntensity" min="0.1" max="2" step="0.1" value="1.0">
+                <span class="value">1.0</span>
+            </div>
+            <div class="parameter">
+                <label>Color Speed</label>
+                <input type="range" id="colorSpeed" min="0" max="2" step="0.1" value="0.5">
+                <span class="value">0.5</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="audio-controls">
+        <button id="audioToggle">🎵 Enable Audio</button>
+        <button id="reactiveToggle">🎛️ Audio Reactive</button>
+        <button id="micToggle">🎤 Microphone</button>
+        <input type="file" id="audioFile" accept="audio/*" style="display: none;">
+        <button onclick="document.getElementById('audioFile').click()">📁 Load Audio</button>
+    </div>
+
+    <div class="timeline">
+        <div>Audio Timeline</div>
+        <div class="timeline-bar" id="timelineBar">
+            <div class="timeline-progress" id="timelineProgress"></div>
+            <div class="timeline-handle" id="timelineHandle"></div>
+        </div>
+        <div id="timeDisplay">00:00 / 00:00</div>
+    </div>
+
+    <div class="preset-buttons">
+        <button onclick="resetToDefaults()">🔄 Reset All</button>
+        <button onclick="loadPreset('psychedelic')">🌈 Psychedelic</button>
+        <button onclick="loadPreset('minimal')">⚫ Minimal</button>
+        <button onclick="loadPreset('chaotic')">⚡ Chaotic</button>
+        <button onclick="randomizeAll()">🎲 Random</button>
+    </div>
+
+    <div class="info-panel">
+        <h4>Performance</h4>
+        <div>FPS: <span id="fps">60</span></div>
+        <div>Audio: <span id="audioLevels">0.0</span></div>
+        <br>
+        <h4>Controls</h4>
+        <div>Space: Pause</div>
+        <div>R: Reset</div>
+        <div>F: Fullscreen</div>
+    </div>
+
+    <script>
+        // WebGL Shader Setup
+        const canvas = document.getElementById('canvas');
+        const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+        
+        if (!gl) {
+            alert('WebGL not supported');
+        }
+
+        // Simplified version of your kaldao shader
+        const vertexShaderSource = `
+            attribute vec2 a_position;
+            varying vec2 v_uv;
+            void main() {
+                gl_Position = vec4(a_position, 0.0, 1.0);
+                v_uv = a_position * 0.5 + 0.5;
+            }
+        `;
+
+        const fragmentShaderSource = `
+            precision mediump float;
+            varying vec2 v_uv;
+            
+            uniform float u_time;
+            uniform float u_flySpeed;
+            uniform float u_rotationSpeed;
+            uniform float u_zoomLevel;
+            uniform float u_kaleidoscopeSegments;
+            uniform float u_truchetRadius;
+            uniform float u_contrast;
+            uniform float u_colorIntensity;
+            uniform float u_colorSpeed;
+            uniform vec2 u_resolution;
+            uniform float u_audioLevel;
+            
+            #define PI 3.14159265359
+            
+            mat2 rotate(float a) {
+                float c = cos(a), s = sin(a);
+                return mat2(c, s, -s, c);
+            }
+            
+            float hash(vec2 p) {
+                return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+            }
+            
+            vec2 kaleidoscope(vec2 p, float n) {
+                float angle = atan(p.y, p.x);
+                float radius = length(p);
+                angle = mod(angle, 2.0 * PI / n);
+                if (mod(floor(angle / (PI / n)), 2.0) == 1.0) {
+                    angle = PI / n - mod(angle, PI / n);
+                }
+                return vec2(cos(angle), sin(angle)) * radius;
+            }
+            
+            float truchetPattern(vec2 p) {
+                vec2 cell = floor(p);
+                vec2 local = fract(p) - 0.5;
+                
+                float h = hash(cell);
+                float radius = u_truchetRadius + u_audioLevel * 0.2;
+                
+                float d = length(local) - radius;
+                
+                if (h > 0.5) {
+                    d = min(d, abs(local.x + local.y) - 0.1);
+                } else {
+                    d = min(d, abs(local.x - local.y) - 0.1);
+                }
+                
+                return d;
+            }
+            
+            vec3 palette(float t) {
+                vec3 a = vec3(0.5, 0.5, 0.5);
+                vec3 b = vec3(0.5, 0.5, 0.5);
+                vec3 c = vec3(1.0, 1.0, 1.0);
+                vec3 d = vec3(0.0, 0.33, 0.67);
+                return a + b * cos(6.28318 * (c * t + d));
+            }
+            
+            void main() {
+                vec2 uv = (v_uv - 0.5) * 2.0;
+                uv.x *= u_resolution.x / u_resolution.y;
+                
+                // Camera movement
+                float cameraZ = u_time * u_flySpeed;
+                
+                // Apply kaleidoscope effect
+                uv = kaleidoscope(uv, u_kaleidoscopeSegments);
+                
+                // Rotation
+                uv *= rotate(u_time * u_rotationSpeed + u_audioLevel);
+                
+                // Zoom
+                uv /= u_zoomLevel;
+                
+                // Generate truchet pattern
+                float d = truchetPattern(uv + vec2(0.0, cameraZ));
+                
+                // Create pattern
+                float pattern = smoothstep(0.02, 0.0, abs(d) - 0.01);
+                
+                // Color
+                vec3 color;
+                if (u_colorIntensity > 0.1) {
+                    float t = length(uv) * 0.5 + u_time * u_colorSpeed;
+                    color = palette(t) * pattern * u_colorIntensity;
+                } else {
+                    color = vec3(pattern);
+                }
+                
+                // Contrast
+                color = pow(color, vec3(1.0 / u_contrast));
+                
+                gl_FragColor = vec4(color, 1.0);
+            }
+        `;
+
+        // Shader compilation
+        function createShader(gl, type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error('Shader compile error:', gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            return shader;
+        }
+
+        const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+        const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+        const program = gl.createProgram();
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+            console.error('Program link error:', gl.getProgramInfoLog(program));
+        }
+
+        // Setup buffers
+        const positionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+            -1, -1,  1, -1,  -1, 1,
+            1, -1,   1, 1,   -1, 1
+        ]), gl.STATIC_DRAW);
+
+        // Get uniform locations
+        const uniforms = {};
+        ['u_time', 'u_flySpeed', 'u_rotationSpeed', 'u_zoomLevel', 
+         'u_kaleidoscopeSegments', 'u_truchetRadius', 'u_contrast',
+         'u_colorIntensity', 'u_colorSpeed', 'u_resolution', 'u_audioLevel'].forEach(name => {
+            uniforms[name] = gl.getUniformLocation(program, name);
+        });
+
+        // Parameters
+        const params = {
+            flySpeed: 0.25,
+            rotationSpeed: 0.025,
+            zoomLevel: 0.3,
+            kaleidoscopeSegments: 10,
+            truchetRadius: 0.35,
+            contrast: 1.0,
+            colorIntensity: 1.0,
+            colorSpeed: 0.5
+        };
+
+        // Audio setup
+        let audioContext, audioSource, analyser, audioData;
+        let audioLevel = 0;
+        let audioEnabled = false;
+        let reactiveEnabled = false;
+
+        async function initAudio() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                audioData = new Uint8Array(analyser.frequencyBinCount);
+                
+                // Connect to destination for monitoring
+                analyser.connect(audioContext.destination);
+                
+                return true;
+            } catch (error) {
+                console.error('Audio initialization failed:', error);
+                return false;
+            }
+        }
+
+        async function enableMicrophone() {
+            if (!audioContext) await initAudio();
+            
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                audioSource = audioContext.createMediaStreamSource(stream);
+                audioSource.connect(analyser);
+                audioEnabled = true;
+                updateAudioButton();
+                return true;
+            } catch (error) {
+                console.error('Microphone access failed:', error);
+                return false;
+            }
+        }
+
+        function loadAudioFile(file) {
+            if (!audioContext) initAudio();
+            
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const arrayBuffer = e.target.result;
+                    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                    
+                    if (audioSource) audioSource.disconnect();
+                    
+                    audioSource = audioContext.createBufferSource();
+                    audioSource.buffer = audioBuffer;
+                    audioSource.loop = true;
+                    audioSource.connect(analyser);
+                    audioSource.start();
+                    
+                    audioEnabled = true;
+                    updateAudioButton();
+                } catch (error) {
+                    console.error('Audio file loading failed:', error);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function updateAudioLevel() {
+            if (!analyser || !audioEnabled) return;
+            
+            analyser.getByteFrequencyData(audioData);
+            
+            // Calculate average level
+            let sum = 0;
+            for (let i = 0; i < audioData.length; i++) {
+                sum += audioData[i];
+            }
+            audioLevel = (sum / audioData.length) / 255.0;
+            
+            // Update reactive parameters
+            if (reactiveEnabled) {
+                const bassLevel = audioData.slice(0, 10).reduce((a, b) => a + b) / 10 / 255;
+                const midLevel = audioData.slice(10, 50).reduce((a, b) => a + b) / 40 / 255;
+                
+                // Reactive parameter adjustments
+                params.truchetRadius = 0.35 + bassLevel * 0.3;
+                params.rotationSpeed = 0.025 + midLevel * 0.1;
+                
+                updateParameterDisplays();
+            }
+        }
+
+        function updateAudioButton() {
+            const button = document.getElementById('audioToggle');
+            button.textContent = audioEnabled ? '🎵 Audio ON' : '🎵 Enable Audio';
+            button.classList.toggle('active', audioEnabled);
+        }
+
+        // Parameter control setup
+        function setupParameterControls() {
+            Object.keys(params).forEach(paramName => {
+                const slider = document.getElementById(paramName);
+                const valueDisplay = slider.nextElementSibling;
+                
+                slider.addEventListener('input', (e) => {
+                    const value = parseFloat(e.target.value);
+                    params[paramName] = value;
+                    valueDisplay.textContent = value.toFixed(2);
+                });
+            });
+        }
+
+        function updateParameterDisplays() {
+            Object.keys(params).forEach(paramName => {
+                const slider = document.getElementById(paramName);
+                const valueDisplay = slider.nextElementSibling;
+                if (slider) {
+                    slider.value = params[paramName];
+                    valueDisplay.textContent = params[paramName].toFixed(2);
+                }
+            });
+        }
+
+        // Preset functions
+        function resetToDefaults() {
+            // Reset to original default values
+            Object.assign(params, {
+                flySpeed: 0.25,
+                rotationSpeed: 0.025,
+                zoomLevel: 0.3,
+                kaleidoscopeSegments: 10,
+                truchetRadius: 0.35,
+                contrast: 1.0,
+                colorIntensity: 1.0,
+                colorSpeed: 0.5
+            });
+            updateParameterDisplays();
+        }
+
+        function loadPreset(presetName) {
+            switch(presetName) {
+                case 'psychedelic':
+                    Object.assign(params, {
+                        kaleidoscopeSegments: 16,
+                        rotationSpeed: 0.1,
+                        colorIntensity: 2.0,
+                        colorSpeed: 1.0,
+                        truchetRadius: 0.2
+                    });
+                    break;
+                case 'minimal':
+                    Object.assign(params, {
+                        kaleidoscopeSegments: 6,
+                        rotationSpeed: 0.01,
+                        colorIntensity: 0.5,
+                        colorSpeed: 0.1,
+                        truchetRadius: 0.5
+                    });
+                    break;
+                case 'chaotic':
+                    Object.assign(params, {
+                        kaleidoscopeSegments: 32,
+                        rotationSpeed: 0.2,
+                        colorIntensity: 1.5,
+                        colorSpeed: 2.0,
+                        truchetRadius: 0.1
+                    });
+                    break;
+            }
+            updateParameterDisplays();
+        }
+
+        function randomizeAll() {
+            Object.keys(params).forEach(paramName => {
+                const slider = document.getElementById(paramName);
+                if (slider) {
+                    const min = parseFloat(slider.min);
+                    const max = parseFloat(slider.max);
+                    params[paramName] = Math.random() * (max - min) + min;
+                }
+            });
+            updateParameterDisplays();
+        }
+
+        // Resize handling
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            gl.viewport(0, 0, canvas.width, canvas.height);
+        }
+
+        // Main render loop
+        let startTime = Date.now();
+        let frameCount = 0;
+
+        function render() {
+            const currentTime = (Date.now() - startTime) / 1000;
+            
+            updateAudioLevel();
+            
+            gl.useProgram(program);
+            
+            // Set uniforms
+            gl.uniform1f(uniforms.u_time, currentTime);
+            gl.uniform1f(uniforms.u_flySpeed, params.flySpeed);
+            gl.uniform1f(uniforms.u_rotationSpeed, params.rotationSpeed);
+            gl.uniform1f(uniforms.u_zoomLevel, params.zoomLevel);
+            gl.uniform1f(uniforms.u_kaleidoscopeSegments, params.kaleidoscopeSegments);
+            gl.uniform1f(uniforms.u_truchetRadius, params.truchetRadius);
+            gl.uniform1f(uniforms.u_contrast, params.contrast);
+            gl.uniform1f(uniforms.u_colorIntensity, params.colorIntensity);
+            gl.uniform1f(uniforms.u_colorSpeed, params.colorSpeed);
+            gl.uniform2f(uniforms.u_resolution, canvas.width, canvas.height);
+            gl.uniform1f(uniforms.u_audioLevel, audioLevel);
+            
+            // Set vertex attributes
+            const positionLocation = gl.getAttribLocation(program, 'a_position');
+            gl.enableVertexAttribArray(positionLocation);
+            gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+            gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+            
+            // Draw
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+            
+            // Update FPS counter
+            frameCount++;
+            if (frameCount % 60 === 0) {
+                document.getElementById('fps').textContent = Math.round(60 * 1000 / (Date.now() - startTime) * frameCount);
+            }
+            
+            // Update audio level display
+            document.getElementById('audioLevels').textContent = audioLevel.toFixed(2);
+            
+            requestAnimationFrame(render);
+        }
+
+        // Event listeners
+        document.getElementById('audioToggle').addEventListener('click', async () => {
+            if (!audioEnabled) {
+                await enableMicrophone();
+            } else {
+                audioEnabled = false;
+                updateAudioButton();
+            }
+        });
+
+        document.getElementById('reactiveToggle').addEventListener('click', () => {
+            reactiveEnabled = !reactiveEnabled;
+            const button = document.getElementById('reactiveToggle');
+            button.textContent = reactiveEnabled ? '🎛️ Reactive ON' : '🎛️ Audio Reactive';
+            button.classList.toggle('active', reactiveEnabled);
+        });
+
+        document.getElementById('micToggle').addEventListener('click', enableMicrophone);
+
+        document.getElementById('audioFile').addEventListener('change', (e) => {
+            if (e.target.files[0]) {
+                loadAudioFile(e.target.files[0]);
+            }
+        });
+
+        // Keyboard controls
+        document.addEventListener('keydown', (e) => {
+            switch(e.code) {
+                case 'Space':
+                    e.preventDefault();
+                    // Toggle pause (implement pause functionality)
+                    break;
+                case 'KeyR':
+                    // Reset parameters
+                    Object.assign(params, {
+                        flySpeed: 0.25,
+                        rotationSpeed: 0.025,
+                        zoomLevel: 0.3,
+                        kaleidoscopeSegments: 10,
+                        truchetRadius: 0.35,
+                        contrast: 1.0,
+                        colorIntensity: 1.0,
+                        colorSpeed: 0.5
+                    });
+                    updateParameterDisplays();
+                    break;
+                case 'KeyF':
+                    // Toggle fullscreen
+                    if (!document.fullscreenElement) {
+                        document.documentElement.requestFullscreen();
+                    } else {
+                        document.exitFullscreen();
+                    }
+                    break;
+            }
+        });
+
+        // Initialize
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        setupParameterControls();
+        render();
+    </script>
+</body>
+</html>

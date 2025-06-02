@@ -10,31 +10,31 @@ shader_type canvas_item;
 uniform float camera_position = 0.0;		// Where we are along the tunnel path (managed by GDScript)
 uniform float rotation_time = 0.0;			// How much the patterns have rotated (accumulated time)
 uniform float plane_rotation_time = 0.0;	// Per-plane rotation amount
-uniform float color_time = 0.0;			// Color cycling time
-uniform float fly_speed = 0.25;			// How fast we move forward (used by GDScript only)
+uniform float color_time = 0.0;				// Color cycling time
+uniform float fly_speed = 0.25;				// How fast we move forward (used by GDScript only)
 uniform float contrast = 1.0;				// Sharpness of edges and details
 
 // Pattern controls
 uniform float kaleidoscope_segments = 10.0;	// How many mirror segments (creates the star pattern)
 uniform int layer_count = 6;
-uniform float truchet_radius = 0.35;			// Size of the circular patterns in each cell
+uniform float truchet_radius = 0.35;		// Size of the circular patterns in each cell
 uniform float center_fill_radius = 0.0;		// Size of the center fill (0.0 for no fill)
-uniform float rotation_speed = 0.025;			// How fast patterns rotate
-uniform float plane_rotation_speed = 0.5;		// Per-layer rotation speed
+uniform float rotation_speed = 0.025;		// How fast patterns rotate
+uniform float plane_rotation_speed = 0.5;	// Per-layer rotation speed
 uniform float zoom_level = 0.3;				// How zoomed in we are (smaller = more zoomed in)
-uniform float color_intensity = 1.0;			// Brightness multiplier
+uniform float color_intensity = 1.0;		// Brightness multiplier
 
 // Camera movement controls
 uniform float camera_tilt_x = 0.0;		// Tilt camera left/right
 uniform float camera_tilt_y = 0.0;		// Tilt camera up/down  
 uniform float camera_roll = 0.0;		// Roll camera around forward axis
-uniform float path_stability = 1.0;	// 1.0=curved path, 0.0=straight, negative=more curved
-uniform float path_scale = 1.0;		// Overall scale of path curvature
+uniform float path_stability = 1.0;		// 1.0=curved path, 0.0=straight, negative=more curved
+uniform float path_scale = 1.0;			// Overall scale of path curvature
 
 // Color system
 uniform bool use_color_palette = false;	// Enable colorful palettes vs black & white
 uniform bool invert_colors = false;		// Invert final colors (negative effect)
-uniform float color_speed = 0.5;			// How fast colors cycle
+uniform float color_speed = 0.5;		// How fast colors cycle
 uniform vec3 palette_a = vec3(0.5, 0.5, 0.5);		// Color palette math coefficients
 uniform vec3 palette_b = vec3(0.5, 0.5, 0.5);		// (these create different color schemes)
 uniform vec3 palette_c = vec3(1.0, 1.0, 1.0);		
@@ -167,7 +167,7 @@ float smoothKaleidoscope(inout vec2 p, float sm, float rep) {
 	float sa = PI / rep - pabs(PI / rep - abs(hpp.y), sm);
 	hpp.y = sign(hpp.y) * sa;
 	
-	hp = toRect(hpp);			// Convert back to rectangular coordinates
+	hp = toRect(hpp);		// Convert back to rectangular coordinates
 	p = hp;
 	
 	return rn;

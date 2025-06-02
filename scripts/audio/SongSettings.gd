@@ -61,14 +61,14 @@ func setup_default_song_structure():
 	# rint("SongSettings: Empty checkpoints array initialized. Use import_audacity_labels() to load from Audacity.")
 
 func update_sync(current_time: float):
-	"""Call this every frame with the current audio playback time"""
-	print("DEBUG: update_sync called with time: %.2fs" % current_time)
+	# """Call this every frame with the current audio playback time"""
+	# print("DEBUG: update_sync called with time: %.2fs" % current_time)
 	
 	if not audio_manager or not audio_manager.playing:
 		print("DEBUG: update_sync - Audio not playing, returning")
 		return
 	
-	print("DEBUG: update_sync - About to check checkpoints")
+	# print("DEBUG: update_sync - About to check checkpoints")
 	# Check if we've reached a new checkpoint
 	check_for_checkpoint_triggers(current_time)
 	
@@ -76,8 +76,8 @@ func update_sync(current_time: float):
 	update_transitions(current_time)
 
 func check_for_checkpoint_triggers(current_time: float):
-	"""Check if we need to trigger a new checkpoint transition"""
-	print("DEBUG: check_for_checkpoint_triggers called - time: %.2fs, checkpoints: %d" % [current_time, checkpoints.size()])
+	# """Check if we need to trigger a new checkpoint transition"""
+	# print("DEBUG: check_for_checkpoint_triggers called - time: %.2fs, checkpoints: %d" % [current_time, checkpoints.size()])
 	
 	if checkpoints.size() == 0:
 		print("DEBUG: No checkpoints to check")
@@ -92,9 +92,9 @@ func check_for_checkpoint_triggers(current_time: float):
 		var is_near = time_diff < 0.2  # Increased from 0.1 to 0.2 seconds
 		var is_new = i != current_checkpoint_index
 		
-		print("DEBUG: Checkpoint %d: %.2fs vs %.2fs (diff: %.3f, near: %s, new: %s)" % [
-			i, current_time, timestamp, time_diff, is_near, is_new
-		])
+		#print("DEBUG: Checkpoint %d: %.2fs vs %.2fs (diff: %.3f, near: %s, new: %s)" % [
+		#	i, current_time, timestamp, time_diff, is_near, is_new
+		#])
 		
 		if is_near and is_new:
 			print("DEBUG: CHECKPOINT HIT! Index: %d, Name: %s" % [i, checkpoint.name])

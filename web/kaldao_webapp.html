@@ -1,0 +1,1458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kaldao Fractal Visualizer - Complete</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #000; color: #fff; font-family: 'Courier New', monospace; overflow: hidden; }
+        #canvas { display: block; }
+        .ui { position: absolute; top: 20px; left: 20px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px; font-size: 14px; max-width: 400px; transition: opacity 0.3s ease; }
+        .controls { position: absolute; top: 20px; right: 20px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px; font-size: 12px; transition: opacity 0.3s ease; }
+        .menu { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.95); padding: 30px; border-radius: 12px; border: 2px solid #444; max-width: 600px; z-index: 1000; }
+        .menu h2 { color: #4CAF50; margin-bottom: 20px; text-align: center; }
+        .menu .section { margin-bottom: 15px; }
+        .menu .section h3 { color: #FFC107; margin-bottom: 8px; }
+        .hidden { opacity: 0; pointer-events: none; }
+        .error { color: #ff4444; }
+        .success { color: #44ff44; }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    
+    <div class="ui" id="ui">
+        <h3>Kaldao Fractal Visualizer</h3>
+        <div id="status">Loading...</div>
+        <div id="currentParam">Parameter: Loading...</div>
+    </div>
+    
+    <div class="controls" id="controls">
+        <strong>CONTROLS</strong><br>
+        ↑/↓ Adjust parameter<br>
+        ←/→ Switch parameter<br>
+        C Randomize colors<br>
+        Shift+C Reset to B&W<br>
+        R Reset current<br>
+        Shift+R Reset all<br>
+        . Randomize parameters<br>
+        I Invert colors<br>
+        Space Pause<br>
+        S Save parameters<br>
+        L Load parameters<br>
+        A Upload audio file<br>
+        Ctrl+Z Undo<br>
+        Ctrl+Y Redo<br>
+        ESC Toggle menu<br>
+    </div>
+
+    <!-- Full Menu -->
+    <div class="menu hidden" id="menu">
+        <h2>🌀 Kaldao Fractal Visualizer</h2>
+        
+        <div class="section">
+            <h3>📊 Current Parameters</h3>
+            <div id="menuParamsList">Loading...</div>
+        </div>
+        
+        <div class="section">
+            <h3>🎮 Controls</h3>
+            <strong>Navigation:</strong><br>
+            ↑/↓ - Adjust current parameter<br>
+            ←/→ - Switch between parameters<br><br>
+            
+            <strong>Randomization:</strong><br>
+            C - Randomize colors<br>
+            Shift+C - Reset to black & white<br>
+            . - Randomize all parameters<br><br>
+            
+            <strong>Reset:</strong><br>
+            R - Reset current parameter<br>
+            Shift+R - Reset all parameters<br><br>
+            
+            <strong>Colors:</strong><br>
+            I - Invert colors<br><br>
+            
+            <strong>Animation:</strong><br>
+            Space - Pause/unpause animation<br><br>
+            
+            <strong>Save/Load:</strong><br>
+            S - Save parameters to file<br>
+            L - Load parameters from file<br><br>
+            
+            <strong>Audio:</strong><br>
+            A - Upload audio file & toggle reactivity<br><br>
+            
+            <strong>Undo/Redo:</strong><br>
+            Ctrl+Z - Undo last change<br>
+            Ctrl+Y - Redo last undone change<br><br>
+            
+            <strong>Menu:</strong><br>
+            ESC - Toggle this menu<br>
+        </div>
+        
+        <div class="section">
+            <h3>🎨 Available Color Palettes</h3>
+            <div id="menuPalettesList">Loading...</div>
+        </div>
+        
+        <div class="section">
+            <h3>🎵 Audio Status</h3>
+            <div id="menuAudioStatus">No audio loaded</div>
+        </div>
+        
+        <div style="text-align: center; margin-top: 20px; opacity: 0.7;">
+            Press ESC to close menu
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let gl, canvas, program;
+        let animationPaused = false;
+        let currentParameterIndex = 0;
+        let currentPaletteIndex = 0;
+        let useColorPalette = false;
+        let invertColors = false;
+        let menuVisible = false;
+        
+        // Audio system
+        let audioContext = null;
+        let audioSource = null;
+        let analyser = null;
+        let audioData = null;
+        let audioElement = null;
+        let audioReactive = false;
+        let audioPlaying = false;
+        let baseParameterValues = {};
+
+        // Undo/Redo system
+        let undoStack = [];
+        let redoStack = [];
+        const maxUndoSteps = 50;
+
+        // Parameters - exact match to Godot
+        const parameters = {
+            fly_speed: { value: 0.25, min: -3.0, max: 3.0, step: 0.1, name: "Fly Speed" },
+            contrast: { value: 1.0, min: 0.1, max: 5.0, step: 0.1, name: "Contrast" },
+            kaleidoscope_segments: { value: 10.0, min: 4.0, max: 80.0, step: 2.0, name: "Kaleidoscope Segments" },
+            truchet_radius: { value: 0.35, min: -1.0, max: 1.0, step: 0.01, name: "Truchet Radius" },
+            center_fill_radius: { value: 0.0, min: -2.0, max: 2.0, step: 0.01, name: "Center Fill Radius" },
+            layer_count: { value: 6, min: 1, max: 10, step: 1, name: "Layer Count" },
+            rotation_speed: { value: 0.025, min: -6.0, max: 6.0, step: 0.01, name: "Rotation Speed" },
+            zoom_level: { value: 0.3, min: -5.0, max: 5.0, step: 0.05, name: "Zoom Level" },
+            color_intensity: { value: 1.0, min: 0.1, max: 2.0, step: 0.1, name: "Color Intensity" },
+            plane_rotation_speed: { value: 0.5, min: -5.0, max: 5.0, step: 0.1, name: "Plane Rotation Speed" },
+            camera_tilt_x: { value: 0.0, min: -10.0, max: 10.0, step: 1.0, name: "Camera Tilt X" },
+            camera_tilt_y: { value: 0.0, min: -10.0, max: 10.0, step: 1.0, name: "Camera Tilt Y" },
+            camera_roll: { value: 0.0, min: -3.14, max: 3.14, step: 0.1, name: "Camera Roll" },
+            path_stability: { value: 1.0, min: -1.0, max: 1.0, step: 0.05, name: "Path Stability" },
+            path_scale: { value: 1.0, min: -3.0, max: 3.0, step: 0.1, name: "Path Scale" },
+            color_speed: { value: 0.5, min: 0.0, max: 2.0, step: 0.1, name: "Color Speed" }
+        };
+
+        // Time accumulation
+        const timeAccumulation = {
+            camera_position: 0.0,
+            rotation_time: 0.0,
+            plane_rotation_time: 0.0,
+            color_time: 0.0
+        };
+
+        // Color palettes
+        const colorPalettes = [
+            { name: "B&W", a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [1.0, 1.0, 1.0], d: [0.0, 0.0, 0.0] },
+            { name: "Rainbow", a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [1.0, 1.0, 1.0], d: [0.0, 0.33, 0.67] },
+            { name: "Fire", a: [0.5, 0.2, 0.1], b: [0.5, 0.3, 0.2], c: [2.0, 1.0, 0.5], d: [0.0, 0.25, 0.5] },
+            { name: "Ocean", a: [0.2, 0.5, 0.8], b: [0.2, 0.3, 0.5], c: [1.0, 1.5, 2.0], d: [0.0, 0.2, 0.5] },
+            { name: "Purple", a: [0.8, 0.5, 0.4], b: [0.2, 0.4, 0.2], c: [2.0, 1.0, 1.0], d: [0.0, 0.25, 0.25] },
+            { name: "Neon", a: [0.2, 0.2, 0.2], b: [0.8, 0.8, 0.8], c: [1.0, 2.0, 1.5], d: [0.0, 0.5, 0.8] },
+            { name: "Sunset", a: [0.7, 0.3, 0.2], b: [0.3, 0.2, 0.1], c: [1.5, 1.0, 0.8], d: [0.0, 0.1, 0.3] }
+        ];
+
+        const parameterKeys = Object.keys(parameters);
+
+        // Shaders
+        const vertexShaderSource = `
+            attribute vec2 a_position;
+            void main() {
+                gl_Position = vec4(a_position, 0.0, 1.0);
+            }
+        `;
+
+        const fragmentShaderSource = `
+            precision highp float;
+            
+            uniform vec2 u_resolution;
+            uniform float u_time;
+            uniform float u_camera_position;
+            uniform float u_rotation_time;
+            uniform float u_plane_rotation_time;
+            uniform float u_color_time;
+            uniform float u_fly_speed;
+            uniform float u_contrast;
+            uniform float u_kaleidoscope_segments;
+            uniform float u_layer_count;
+            uniform float u_truchet_radius;
+            uniform float u_center_fill_radius;
+            uniform float u_rotation_speed;
+            uniform float u_plane_rotation_speed;
+            uniform float u_zoom_level;
+            uniform float u_color_intensity;
+            uniform float u_camera_tilt_x;
+            uniform float u_camera_tilt_y;
+            uniform float u_camera_roll;
+            uniform float u_path_stability;
+            uniform float u_path_scale;
+            uniform float u_use_color_palette;
+            uniform float u_invert_colors;
+            uniform float u_color_speed;
+            uniform vec3 u_palette_a;
+            uniform vec3 u_palette_b;
+            uniform vec3 u_palette_c;
+            uniform vec3 u_palette_d;
+            
+            #define PI 3.14159265359
+            
+            mat2 ROT(float a) {
+                return mat2(cos(a), sin(a), -sin(a), cos(a));
+            }
+            
+            float hashf(float co) {
+                return fract(sin(co * 12.9898) * 13758.5453);
+            }
+            
+            float hashv(vec2 p) {
+                float a = dot(p, vec2(127.1, 311.7));
+                return fract(sin(a) * 43758.5453123);
+            }
+            
+            float tanh_approx(float x) {
+                float x2 = x * x;
+                return clamp(x * (27.0 + x2) / (27.0 + 9.0 * x2), -1.0, 1.0);
+            }
+            
+            float pmin(float a, float b, float k) {
+                float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+                return mix(b, a, h) - k * h * (1.0 - h);
+            }
+            
+            float pmax(float a, float b, float k) {
+                return -pmin(-a, -b, k);
+            }
+            
+            float pabs(float a, float k) {
+                return pmax(a, -a, k);
+            }
+            
+            vec2 toPolar(vec2 p) {
+                return vec2(length(p), atan(p.y, p.x));
+            }
+            
+            vec2 toRect(vec2 p) {
+                return vec2(p.x * cos(p.y), p.x * sin(p.y));
+            }
+            
+            vec3 palette(float t) {
+                return u_palette_a + u_palette_b * cos(6.28318 * (u_palette_c * t + u_palette_d));
+            }
+            
+            vec3 offset(float z) {
+                float a = z;
+                vec2 curved_path = -0.075 * u_path_scale * (
+                    vec2(cos(a), sin(a * sqrt(2.0))) +
+                    vec2(cos(a * sqrt(0.75)), sin(a * sqrt(0.5)))
+                );
+                
+                vec2 straight_path = vec2(0.0);
+                
+                vec2 p;
+                if (u_path_stability >= 0.0) {
+                    p = mix(curved_path, straight_path, u_path_stability);
+                } else {
+                    p = curved_path * (1.0 + abs(u_path_stability) * 2.0);
+                }
+                
+                p += vec2(u_camera_tilt_x, u_camera_tilt_y) * z * 0.1 * u_path_scale;
+                
+                return vec3(p, z);
+            }
+            
+            vec3 doffset(float z) {
+                float eps = 0.1;
+                return 0.5 * (offset(z + eps) - offset(z - eps)) / eps;
+            }
+            
+            vec3 ddoffset(float z) {
+                float eps = 0.1;
+                return 0.125 * (doffset(z + eps) - doffset(z - eps)) / eps;
+            }
+            
+            float modMirror1(inout float p, float size) {
+                float halfsize = size * 0.5;
+                float c = floor((p + halfsize) / size);
+                p = mod(p + halfsize, size) - halfsize;
+                p *= mod(c, 2.0) * 2.0 - 1.0;
+                return c;
+            }
+            
+            float smoothKaleidoscope(inout vec2 p, float sm, float rep) {
+                vec2 hp = p;
+                vec2 hpp = toPolar(hp);
+                
+                float rn = modMirror1(hpp.y, 2.0 * PI / rep);
+                
+                float sa = PI / rep - pabs(PI / rep - abs(hpp.y), sm);
+                hpp.y = sign(hpp.y) * sa;
+                
+                hp = toRect(hpp);
+                p = hp;
+                
+                return rn;
+            }
+            
+            vec3 cell_df(float r, vec2 np, vec2 mp, vec2 off) {
+                vec2 n0 = normalize(vec2(1.0, 1.0));
+                vec2 n1 = normalize(vec2(1.0, -1.0));
+                
+                np += off;
+                mp -= off;
+                
+                float hh = hashv(np);
+                float h0 = hh;
+                
+                vec2 p0 = mp;
+                p0 = abs(p0);
+                p0 -= 0.5;
+                float d0 = length(p0);
+                float d1 = abs(d0 - r);
+                
+                float dot0 = dot(n0, mp);
+                float dot1 = dot(n1, mp);
+                
+                float d2 = abs(dot0);
+                float t2 = dot1;
+                d2 = abs(t2) > sqrt(0.5) ? d0 : d2;
+                
+                float d3 = abs(dot1);
+                float t3 = dot0;
+                d3 = abs(t3) > sqrt(0.5) ? d0 : d3;
+                
+                float d = d0;
+                d = min(d, d1);
+                
+                if (h0 > 0.85) {
+                    d = min(d, d2);
+                    d = min(d, d3);
+                } else if (h0 > 0.5) {
+                    d = min(d, d2);
+                } else if (h0 > 0.15) {
+                    d = min(d, d3);
+                }
+                
+                float center_circle_factor = length(mp) <= r ? 1.0 : 0.0;
+                return vec3(d, (d0 - r), center_circle_factor);
+            }
+            
+            vec3 truchet_df(float r, vec2 p) {
+                vec2 np = floor(p + 0.5);
+                vec2 mp = fract(p + 0.5) - 0.5;
+                return cell_df(r, np, mp, vec2(0.0));
+            }
+            
+            vec4 alphaBlend(vec4 back, vec4 front) {
+                float w = front.w + back.w * (1.0 - front.w);
+                vec3 xyz = (front.xyz * front.w + back.xyz * back.w * (1.0 - front.w)) / w;
+                return w > 0.0 ? vec4(xyz, w) : vec4(0.0);
+            }
+            
+            vec3 alphaBlend34(vec3 back, vec4 front) {
+                return mix(back, front.xyz, front.w);
+            }
+            
+            vec4 plane(vec3 ro, vec3 rd, vec3 pp, vec3 off, float aa, float n) {
+                float h_ = hashf(n);
+                float h0 = fract(1777.0 * h_);
+                float h1 = fract(2087.0 * h_);
+                float h4 = fract(3499.0 * h_);
+                
+                float l = length(pp - ro);
+                
+                vec2 p = (pp - off * vec3(1.0, 1.0, 0.0)).xy;
+                vec2 original_p = p;
+                
+                p = ROT(u_plane_rotation_time * (h4 - 0.5)) * p;
+                
+                float rep = u_kaleidoscope_segments;
+                float sm = 0.05 * 20.0 / rep;
+                float sn = smoothKaleidoscope(p, sm, rep);
+                
+                p = ROT(2.0 * PI * h0 + u_rotation_time) * p;
+                
+                float z = u_zoom_level;
+                p /= z;
+                p += 0.5 + floor(h1 * 1000.0);
+                
+                float tl = tanh_approx(0.33 * l);
+                float r = u_truchet_radius;
+                vec3 d3 = truchet_df(r, p);
+                d3.xy *= z;
+                float d = d3.x;
+                float lw = 0.025 * z;
+                d -= lw;
+                
+                vec3 col = mix(vec3(1.0), vec3(0.0), smoothstep(aa, -aa, d));
+                col = mix(col, vec3(0.0), smoothstep(mix(1.0, -0.5, tl), 1.0, sin(PI * 100.0 * d)));
+                
+                float center_distance = length(original_p);
+                float center_edge = smoothstep(u_center_fill_radius + aa, u_center_fill_radius - aa, center_distance);
+                float transparency = 0.99;
+                col = mix(col, vec3(0.0), center_edge * (u_center_fill_radius > 0.01 ? 1.0 : 0.0) * transparency);
+                
+                float t = smoothstep(aa, -aa, -d3.y - 3.0 * lw) *
+                         mix(0.5, 1.0, smoothstep(aa, -aa, -d3.y - lw));
+                
+                col = mix(col, vec3(0.01), d3.y <= 0.0 ? 1.0 : 0.0);
+                
+                return vec4(col, t);
+            }
+            
+            vec3 skyColor(vec3 ro, vec3 rd) {
+                float d = pow(max(dot(rd, vec3(0.0, 0.0, 1.0)), 0.0), 20.0);
+                return vec3(d);
+            }
+            
+            vec3 color(vec3 ww, vec3 uu, vec3 vv, vec3 ro, vec2 p) {
+                float lp = length(p);
+                vec2 np = p + 1.0 / (u_resolution * u_contrast);
+                float rdd = (2.0 + 1.0 * tanh_approx(lp));
+                
+                vec3 rd = normalize(p.x * uu + p.y * vv + rdd * ww);
+                vec3 nrd = normalize(np.x * uu + np.y * vv + rdd * ww);
+                
+                float planeDist = 1.0 - 0.25;
+                float furthest = u_layer_count;
+                float fadeFrom = max(furthest - 5.0, 0.0);
+                
+                float nz = floor(ro.z / planeDist);
+                
+                vec3 skyCol = skyColor(ro, rd);
+                
+                vec4 acol = vec4(0.0);
+                float cutOff = 0.95;
+                
+                for (float i = 1.0; i <= 10.0; i += 1.0) {
+                    if (i > furthest) break;
+                    
+                    float pz = planeDist * nz + planeDist * i;
+                    float pd = (pz - ro.z) / rd.z;
+                    
+                    if (pd > 0.0 && acol.w < cutOff) {
+                        vec3 pp = ro + rd * pd;
+                        vec3 npp = ro + nrd * pd;
+                        
+                        float aa = 3.0 * length(pp - npp);
+                        vec3 off = offset(pp.z);
+                        
+                        vec4 pcol = plane(ro, rd, pp, off, aa, nz + i);
+                        
+                        float nz1 = pp.z - ro.z;
+                        float fadeIn = smoothstep(planeDist * furthest, planeDist * fadeFrom, nz1);
+                        float fadeOut = smoothstep(0.0, planeDist * 0.1, nz1);
+                        
+                        pcol.xyz = mix(skyCol, pcol.xyz, fadeIn);
+                        pcol.w *= fadeOut;
+                        pcol = clamp(pcol, 0.0, 1.0);
+                        
+                        acol = alphaBlend(pcol, acol);
+                    }
+                }
+                
+                vec3 col = alphaBlend34(skyCol, acol);
+                return col;
+            }
+            
+            vec3 effect(vec2 p, vec2 q) {
+                vec3 ro = offset(u_camera_position);
+                vec3 dro = doffset(u_camera_position);
+                vec3 ddro = ddoffset(u_camera_position);
+                
+                vec3 ww = normalize(dro);
+                vec3 uu = normalize(cross(
+                    normalize(vec3(0.0, 1.0, 0.0) + ddro),
+                    ww
+                ));
+                vec3 vv = normalize(cross(ww, uu));
+                
+                if (abs(u_camera_roll) > 0.001) {
+                    mat2 roll_rot = ROT(u_camera_roll);
+                    p = roll_rot * p;
+                }
+                
+                vec3 col = color(ww, uu, vv, ro, p);
+                
+                return col;
+            }
+            
+            vec3 postProcess(vec3 col, vec2 q) {
+                if (u_use_color_palette > 0.5) {
+                    float t = length(col) + u_color_time;
+                    col = palette(t) * length(col);
+                }
+                
+                col = clamp(col, 0.0, 1.0);
+                col = pow(col, vec3(1.0 / 2.2));
+                col = col * 0.6 + 0.4 * col * col * (3.0 - 2.0 * col);
+                col = mix(col, vec3(dot(col, vec3(0.33))), -0.4);
+                
+                col *= 0.5 + 0.5 * pow(19.0 * q.x * q.y * (1.0 - q.x) * (1.0 - q.y), 0.7);
+                col *= u_color_intensity;
+                
+                if (u_invert_colors > 0.5) {
+                    col = vec3(1.0) - col;
+                }
+                
+                return col;
+            }
+            
+            void main() {
+                vec2 q = gl_FragCoord.xy / u_resolution.xy;
+                vec2 p = -1.0 + 2.0 * q;
+                p.x *= u_resolution.x / u_resolution.y;
+                
+                vec3 col = effect(p, q);
+                col = postProcess(col, q);
+                
+                gl_FragColor = vec4(col, 1.0);
+            }
+        `;
+
+        // Uniform locations
+        let uniforms = {};
+
+        function init() {
+            try {
+                canvas = document.getElementById('canvas');
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                
+                gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+                if (!gl) throw new Error('WebGL not supported');
+                
+                setupShaders();
+                setupGeometry();
+                setupUniforms();
+                setupControls();
+                
+                updateStatus('✅ Kaldao loaded successfully!', 'success');
+                updateDisplay();
+                render();
+                
+            } catch (error) {
+                updateStatus(`❌ Error: ${error.message}`, 'error');
+                console.error(error);
+            }
+        }
+
+        function setupShaders() {
+            const vertexShader = createShader(gl.VERTEX_SHADER, vertexShaderSource);
+            const fragmentShader = createShader(gl.FRAGMENT_SHADER, fragmentShaderSource);
+            program = createProgram(vertexShader, fragmentShader);
+        }
+
+        function createShader(type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                const error = gl.getShaderInfoLog(shader);
+                gl.deleteShader(shader);
+                throw new Error(`Shader compilation failed: ${error}`);
+            }
+            return shader;
+        }
+
+        function createProgram(vertexShader, fragmentShader) {
+            const prog = gl.createProgram();
+            gl.attachShader(prog, vertexShader);
+            gl.attachShader(prog, fragmentShader);
+            gl.linkProgram(prog);
+            
+            if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+                const error = gl.getProgramInfoLog(prog);
+                gl.deleteProgram(prog);
+                throw new Error(`Program linking failed: ${error}`);
+            }
+            return prog;
+        }
+
+        function setupGeometry() {
+            const positionBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+                -1, -1, 1, -1, -1, 1, 1, 1
+            ]), gl.STATIC_DRAW);
+            
+            const positionLocation = gl.getAttribLocation(program, 'a_position');
+            gl.enableVertexAttribArray(positionLocation);
+            gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+        }
+
+        function setupUniforms() {
+            const uniformNames = [
+                'u_resolution', 'u_time', 'u_camera_position', 'u_rotation_time',
+                'u_plane_rotation_time', 'u_color_time', 'u_fly_speed', 'u_contrast',
+                'u_kaleidoscope_segments', 'u_layer_count', 'u_truchet_radius',
+                'u_center_fill_radius', 'u_rotation_speed', 'u_plane_rotation_speed',
+                'u_zoom_level', 'u_color_intensity', 'u_camera_tilt_x', 'u_camera_tilt_y',
+                'u_camera_roll', 'u_path_stability', 'u_path_scale', 'u_use_color_palette',
+                'u_invert_colors', 'u_color_speed', 'u_palette_a', 'u_palette_b',
+                'u_palette_c', 'u_palette_d'
+            ];
+            
+            uniformNames.forEach(name => {
+                uniforms[name] = gl.getUniformLocation(program, name);
+            });
+        }
+
+        function setupControls() {
+            document.addEventListener('keydown', (e) => {
+                try {
+                    switch(e.code) {
+                        case 'ArrowUp':
+                            e.preventDefault();
+                            adjustParameter(1);
+                            break;
+                        case 'ArrowDown':
+                            e.preventDefault();
+                            adjustParameter(-1);
+                            break;
+                        case 'ArrowLeft':
+                            e.preventDefault();
+                            switchParameter(-1);
+                            break;
+                        case 'ArrowRight':
+                            e.preventDefault();
+                            switchParameter(1);
+                            break;
+                        case 'Space':
+                            e.preventDefault();
+                            animationPaused = !animationPaused;
+                            updateStatus(`Animation: ${animationPaused ? 'PAUSED' : 'RUNNING'}`, 'info');
+                            break;
+                        case 'KeyC':
+                            e.preventDefault();
+                            if (e.shiftKey) {
+                                resetToBlackWhite();
+                            } else {
+                                randomizeColors();
+                            }
+                            break;
+                        case 'KeyR':
+                            e.preventDefault();
+                            if (e.shiftKey) {
+                                if (confirm('Reset all parameters?')) {
+                                    resetAllParameters();
+                                }
+                            } else {
+                                resetCurrentParameter();
+                            }
+                            break;
+                        case 'Period':
+                            e.preventDefault();
+                            randomizeParameters();
+                            break;
+                        case 'KeyI':
+                            e.preventDefault();
+                            toggleInvertColors();
+                            break;
+                        case 'KeyS':
+                            e.preventDefault();
+                            saveParameters();
+                            break;
+                        case 'KeyL':
+                            e.preventDefault();
+                            loadParameters();
+                            break;
+                        case 'Escape':
+                            e.preventDefault();
+                            toggleMenu();
+                            break;
+                        case 'KeyA':
+                            e.preventDefault();
+                            toggleAudio();
+                            break;
+                        case 'KeyZ':
+                            e.preventDefault();
+                            if (e.ctrlKey || e.metaKey) {
+                                undo();
+                            }
+                            break;
+                        case 'KeyY':
+                            e.preventDefault();
+                            if (e.ctrlKey || e.metaKey) {
+                                redo();
+                            }
+                            break;
+                    }
+                } catch (error) {
+                    updateStatus(`Input error: ${error.message}`, 'error');
+                }
+            });
+
+            window.addEventListener('resize', () => {
+                if (canvas && gl) {
+                    canvas.width = window.innerWidth;
+                    canvas.height = window.innerHeight;
+                    gl.viewport(0, 0, canvas.width, canvas.height);
+                }
+            });
+        }
+
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            if (statusDiv) {
+                statusDiv.className = type;
+                statusDiv.textContent = message;
+            }
+        }
+
+        function updateDisplay() {
+            const paramKey = parameterKeys[currentParameterIndex];
+            const param = parameters[paramKey];
+            const palette = colorPalettes[currentPaletteIndex];
+            
+            const paramDiv = document.getElementById('currentParam');
+            if (paramDiv) {
+                paramDiv.textContent = `${param.name}: ${param.value.toFixed(3)} | ${palette.name}${invertColors ? ' (Inverted)' : ''}`;
+            }
+            
+            // Update menu if visible
+            updateMenuDisplay();
+        }
+
+        function adjustParameter(delta) {
+            // Save current state before making changes
+            saveStateForUndo();
+            
+            const paramKey = parameterKeys[currentParameterIndex];
+            const param = parameters[paramKey];
+            
+            param.value = Math.max(param.min, Math.min(param.max, param.value + delta * param.step));
+            
+            if (paramKey === 'kaleidoscope_segments') {
+                param.value = Math.round(param.value / 2) * 2;
+            }
+            
+            updateDisplay();
+        }
+
+        function switchParameter(delta) {
+            currentParameterIndex = (currentParameterIndex + delta + parameterKeys.length) % parameterKeys.length;
+            updateDisplay();
+        }
+
+        function randomizeColors() {
+            // Save current state before making changes
+            saveStateForUndo();
+            
+            const palette = colorPalettes[currentPaletteIndex];
+            for (let i = 0; i < 3; i++) {
+                palette.a[i] = Math.random();
+                palette.b[i] = Math.random();
+                palette.c[i] = Math.random() * 2.0;
+                palette.d[i] = Math.random();
+            }
+            
+            if (currentPaletteIndex === 0) {
+                currentPaletteIndex = 1;
+                useColorPalette = true;
+            }
+            
+            updateDisplay();
+        }
+
+        function resetToBlackWhite() {
+            // Save current state before making changes
+            saveStateForUndo();
+            
+            currentPaletteIndex = 0;
+            useColorPalette = false;
+            invertColors = false;
+            updateDisplay();
+        }
+
+        function toggleInvertColors() {
+            // Save current state before making changes
+            saveStateForUndo();
+            
+            invertColors = !invertColors;
+            updateDisplay();
+        }
+
+        function randomizeParameters() {
+            // Save current state before making changes
+            saveStateForUndo();
+            
+            const excludeParams = ['color_intensity', 'color_speed'];
+            
+            Object.keys(parameters).forEach(key => {
+                if (excludeParams.includes(key)) return;
+                
+                const param = parameters[key];
+                param.value = Math.random() * (param.max - param.min) + param.min;
+                param.value = Math.round(param.value / param.step) * param.step;
+                
+                if (key === 'kaleidoscope_segments') {
+                    param.value = Math.round(param.value / 2) * 2;
+                }
+                
+                param.value = Math.max(param.min, Math.min(param.max, param.value));
+            });
+            
+            updateDisplay();
+        }
+
+        function resetCurrentParameter() {
+            // Save current state before making changes
+            saveStateForUndo();
+            
+            const paramKey = parameterKeys[currentParameterIndex];
+            const param = parameters[paramKey];
+            
+            const defaults = {
+                fly_speed: 0.25, contrast: 1.0, kaleidoscope_segments: 10.0,
+                truchet_radius: 0.35, center_fill_radius: 0.0, layer_count: 6,
+                rotation_speed: 0.025, zoom_level: 0.3, color_intensity: 1.0,
+                plane_rotation_speed: 0.5, camera_tilt_x: 0.0, camera_tilt_y: 0.0,
+                camera_roll: 0.0, path_stability: 1.0, path_scale: 1.0, color_speed: 0.5
+            };
+            
+            if (defaults[paramKey] !== undefined) {
+                param.value = defaults[paramKey];
+            }
+            
+            updateDisplay();
+        }
+
+        function resetAllParameters() {
+            // Save current state before making changes
+            saveStateForUndo();
+            
+            Object.keys(parameters).forEach(key => {
+                const defaults = {
+                    fly_speed: 0.25, contrast: 1.0, kaleidoscope_segments: 10.0,
+                    truchet_radius: 0.35, center_fill_radius: 0.0, layer_count: 6,
+                    rotation_speed: 0.025, zoom_level: 0.3, color_intensity: 1.0,
+                    plane_rotation_speed: 0.5, camera_tilt_x: 0.0, camera_tilt_y: 0.0,
+                    camera_roll: 0.0, path_stability: 1.0, path_scale: 1.0, color_speed: 0.5
+                };
+                
+                if (defaults[key] !== undefined) {
+                    parameters[key].value = defaults[key];
+                }
+            });
+            
+            currentPaletteIndex = 0;
+            useColorPalette = false;
+            invertColors = false;
+            
+            updateDisplay();
+            updateMenuDisplay();
+        }
+
+        // Undo/Redo System Functions
+        function saveStateForUndo() {
+            // Create a snapshot of the current state
+            const state = {
+                parameters: {},
+                currentPaletteIndex: currentPaletteIndex,
+                useColorPalette: useColorPalette,
+                invertColors: invertColors,
+                palettes: JSON.parse(JSON.stringify(colorPalettes)) // Deep copy
+            };
+            
+            // Copy parameter values
+            Object.keys(parameters).forEach(key => {
+                state.parameters[key] = parameters[key].value;
+            });
+            
+            // Add to undo stack
+            undoStack.push(state);
+            
+            // Limit stack size
+            if (undoStack.length > maxUndoSteps) {
+                undoStack.shift();
+            }
+            
+            // Clear redo stack when new action is performed
+            redoStack = [];
+        }
+
+        function undo() {
+            if (undoStack.length === 0) {
+                updateStatus('Nothing to undo', 'info');
+                return;
+            }
+            
+            // Save current state to redo stack
+            const currentState = {
+                parameters: {},
+                currentPaletteIndex: currentPaletteIndex,
+                useColorPalette: useColorPalette,
+                invertColors: invertColors,
+                palettes: JSON.parse(JSON.stringify(colorPalettes))
+            };
+            
+            Object.keys(parameters).forEach(key => {
+                currentState.parameters[key] = parameters[key].value;
+            });
+            
+            redoStack.push(currentState);
+            
+            // Restore previous state
+            const previousState = undoStack.pop();
+            restoreState(previousState);
+            
+            updateStatus(`⟲ Undone (${undoStack.length} steps remaining)`, 'success');
+        }
+
+        function redo() {
+            if (redoStack.length === 0) {
+                updateStatus('Nothing to redo', 'info');
+                return;
+            }
+            
+            // Save current state to undo stack
+            const currentState = {
+                parameters: {},
+                currentPaletteIndex: currentPaletteIndex,
+                useColorPalette: useColorPalette,
+                invertColors: invertColors,
+                palettes: JSON.parse(JSON.stringify(colorPalettes))
+            };
+            
+            Object.keys(parameters).forEach(key => {
+                currentState.parameters[key] = parameters[key].value;
+            });
+            
+            undoStack.push(currentState);
+            
+            // Restore next state
+            const nextState = redoStack.pop();
+            restoreState(nextState);
+            
+            updateStatus(`⟳ Redone (${redoStack.length} steps available)`, 'success');
+        }
+
+        function restoreState(state) {
+            // Restore parameters
+            Object.keys(state.parameters).forEach(key => {
+                if (parameters[key]) {
+                    parameters[key].value = state.parameters[key];
+                }
+            });
+            
+            // Restore color palette state
+            currentPaletteIndex = state.currentPaletteIndex;
+            useColorPalette = state.useColorPalette;
+            invertColors = state.invertColors;
+            
+            // Restore palette data
+            if (state.palettes) {
+                state.palettes.forEach((palette, index) => {
+                    if (colorPalettes[index]) {
+                        colorPalettes[index] = { ...palette };
+                    }
+                });
+            }
+            
+            updateDisplay();
+            updateMenuDisplay();
+        }
+
+        function toggleMenu() {
+            menuVisible = !menuVisible;
+            const menu = document.getElementById('menu');
+            const ui = document.getElementById('ui');
+            const controls = document.getElementById('controls');
+            
+            if (menuVisible) {
+                menu.classList.remove('hidden');
+                ui.classList.add('hidden');
+                controls.classList.add('hidden');
+                updateMenuDisplay();
+            } else {
+                menu.classList.add('hidden');
+                ui.classList.remove('hidden');
+                controls.classList.remove('hidden');
+            }
+        }
+
+        function updateMenuDisplay() {
+            if (!menuVisible) return;
+            
+            // Update parameters list
+            const paramsList = document.getElementById('menuParamsList');
+            if (paramsList) {
+                let paramsHTML = '';
+                Object.keys(parameters).forEach((key, index) => {
+                    const param = parameters[key];
+                    const isCurrent = index === currentParameterIndex;
+                    const style = isCurrent ? 'color: #4CAF50; font-weight: bold;' : '';
+                    paramsHTML += `<div style="${style}">${param.name}: ${param.value.toFixed(3)}</div>`;
+                });
+                paramsList.innerHTML = paramsHTML;
+            }
+            
+            // Update palettes list
+            const palettesList = document.getElementById('menuPalettesList');
+            if (palettesList) {
+                let palettesHTML = '';
+                colorPalettes.forEach((palette, index) => {
+                    const isCurrent = index === currentPaletteIndex;
+                    const style = isCurrent ? 'color: #4CAF50; font-weight: bold;' : '';
+                    const inverted = isCurrent && invertColors ? ' (Inverted)' : '';
+                    palettesHTML += `<div style="${style}">${palette.name}${inverted}</div>`;
+                });
+                palettesList.innerHTML = palettesHTML;
+            }
+            
+            // Update audio status
+            const audioStatus = document.getElementById('menuAudioStatus');
+            if (audioStatus) {
+                if (!audioElement) {
+                    audioStatus.innerHTML = '🎵 No audio loaded<br><em>Press A to upload audio file</em>';
+                } else {
+                    const status = audioPlaying ? '▶️ Playing' : '⏸️ Paused';
+                    const reactive = audioReactive ? ' (Reactive)' : '';
+                    audioStatus.innerHTML = `${status}${reactive}<br><em>Press A to toggle</em>`;
+                }
+            }
+        }
+
+        function saveParameters() {
+            try {
+                const saveData = {
+                    parameters: {},
+                    palette: {
+                        currentPaletteIndex: currentPaletteIndex,
+                        useColorPalette: useColorPalette,
+                        invertColors: invertColors,
+                        palettes: colorPalettes
+                    },
+                    timeAccumulation: timeAccumulation,
+                    version: "1.0",
+                    timestamp: new Date().toISOString(),
+                    description: "Kaldao Fractal Visualizer Parameters"
+                };
+                
+                // Save parameter values
+                Object.keys(parameters).forEach(key => {
+                    saveData.parameters[key] = parameters[key].value;
+                });
+                
+                const jsonString = JSON.stringify(saveData, null, 2);
+                const blob = new Blob([jsonString], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `kaldao-fractal-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                updateStatus('✅ Parameters saved to file!', 'success');
+                
+            } catch (error) {
+                updateStatus(`❌ Save failed: ${error.message}`, 'error');
+            }
+        }
+
+        function loadParameters() {
+            try {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.json';
+                
+                input.onchange = function(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        try {
+                            const saveData = JSON.parse(e.target.result);
+                            
+                            // Validate the save data
+                            if (!saveData.parameters || !saveData.palette) {
+                                throw new Error('Invalid save file format');
+                            }
+                            
+                            // Load parameters
+                            Object.keys(parameters).forEach(key => {
+                                if (saveData.parameters[key] !== undefined) {
+                                    parameters[key].value = saveData.parameters[key];
+                                }
+                            });
+                            
+                            // Load palette settings
+                            if (saveData.palette.currentPaletteIndex !== undefined) {
+                                currentPaletteIndex = saveData.palette.currentPaletteIndex;
+                            }
+                            if (saveData.palette.useColorPalette !== undefined) {
+                                useColorPalette = saveData.palette.useColorPalette;
+                            }
+                            if (saveData.palette.invertColors !== undefined) {
+                                invertColors = saveData.palette.invertColors;
+                            }
+                            if (saveData.palette.palettes) {
+                                // Copy custom palette data
+                                saveData.palette.palettes.forEach((palette, index) => {
+                                    if (colorPalettes[index]) {
+                                        colorPalettes[index] = { ...palette };
+                                    }
+                                });
+                            }
+                            
+                            // Load time accumulation if present
+                            if (saveData.timeAccumulation) {
+                                Object.assign(timeAccumulation, saveData.timeAccumulation);
+                            }
+                            
+                            updateDisplay();
+                            updateMenuDisplay();
+                            
+                            const timestamp = saveData.timestamp ? 
+                                new Date(saveData.timestamp).toLocaleString() : 'Unknown';
+                            updateStatus(`✅ Parameters loaded! (Saved: ${timestamp})`, 'success');
+                            
+                        } catch (error) {
+                            updateStatus(`❌ Load failed: ${error.message}`, 'error');
+                        }
+                    };
+                    
+                    reader.readAsText(file);
+                };
+                
+                input.click();
+                
+            } catch (error) {
+                updateStatus(`❌ Load failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function toggleAudio() {
+            if (!audioContext) {
+                await initAudioContext();
+            }
+            
+            if (!audioElement) {
+                // Prompt user to upload audio file
+                uploadAudioFile();
+            } else {
+                // Toggle audio playback and reactivity
+                if (audioPlaying) {
+                    audioElement.pause();
+                    audioPlaying = false;
+                    audioReactive = false;
+                    restoreBaseParameters();
+                    updateStatus('🎵 Audio paused', 'info');
+                } else {
+                    try {
+                        // Resume audio context if needed
+                        if (audioContext.state === 'suspended') {
+                            await audioContext.resume();
+                        }
+                        
+                        await audioElement.play();
+                        audioPlaying = true;
+                        audioReactive = true;
+                        storeBaseParameters();
+                        updateStatus('🎵 Audio playing with reactivity!', 'success');
+                    } catch (error) {
+                        updateStatus(`❌ Audio playback failed: ${error.message}`, 'error');
+                    }
+                }
+                updateMenuDisplay();
+            }
+        }
+
+        async function initAudioContext() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // Resume context if suspended (required by some browsers)
+                if (audioContext.state === 'suspended') {
+                    await audioContext.resume();
+                }
+                
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 2048;
+                analyser.smoothingTimeConstant = 0.8;
+                audioData = new Uint8Array(analyser.frequencyBinCount);
+                
+                updateStatus('🎵 Audio system initialized', 'success');
+            } catch (error) {
+                updateStatus(`❌ Audio init failed: ${error.message}`, 'error');
+            }
+        }
+
+        function uploadAudioFile() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'audio/*,.wav,.mp3,.ogg,.m4a,.aac';
+            
+            input.onchange = async function(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+                
+                updateStatus(`🎵 Loading audio: ${file.name}...`, 'info');
+                
+                try {
+                    // Clean up previous audio
+                    if (audioElement) {
+                        audioElement.pause();
+                        audioElement.src = '';
+                        audioElement = null;
+                    }
+                    
+                    if (audioSource) {
+                        audioSource.disconnect();
+                        audioSource = null;
+                    }
+                    
+                    // Create new audio element
+                    audioElement = new Audio();
+                    audioElement.preload = 'auto';
+                    audioElement.loop = true;
+                    
+                    // Create object URL
+                    const audioURL = URL.createObjectURL(file);
+                    audioElement.src = audioURL;
+                    
+                    // Wait for audio to load
+                    await new Promise((resolve, reject) => {
+                        audioElement.oncanplaythrough = resolve;
+                        audioElement.onerror = () => reject(new Error('Failed to decode audio file'));
+                        audioElement.onabort = () => reject(new Error('Audio loading aborted'));
+                        
+                        // Timeout after 10 seconds
+                        setTimeout(() => reject(new Error('Audio loading timeout')), 10000);
+                    });
+                    
+                    // Resume audio context if needed
+                    if (audioContext.state === 'suspended') {
+                        await audioContext.resume();
+                    }
+                    
+                    // Connect audio to analyser
+                    audioSource = audioContext.createMediaElementSource(audioElement);
+                    audioSource.connect(analyser);
+                    audioSource.connect(audioContext.destination);
+                    
+                    updateStatus(`🎵 Audio loaded: ${file.name}`, 'success');
+                    updateMenuDisplay();
+                    
+                    // Auto-start playback with reactivity
+                    try {
+                        await audioElement.play();
+                        audioPlaying = true;
+                        audioReactive = true;
+                        storeBaseParameters();
+                        updateStatus(`🎵 Playing: ${file.name} (Reactive mode)`, 'success');
+                    } catch (playError) {
+                        updateStatus(`⚠️ Audio loaded but autoplay blocked. Press A to play.`, 'info');
+                    }
+                    
+                } catch (error) {
+                    console.error('Audio loading error:', error);
+                    updateStatus(`❌ Failed to load audio: ${error.message}`, 'error');
+                    
+                    // Clean up on error
+                    if (audioElement) {
+                        audioElement.src = '';
+                        audioElement = null;
+                    }
+                    if (audioSource) {
+                        audioSource.disconnect();
+                        audioSource = null;
+                    }
+                }
+            };
+            
+            input.click();
+        }
+
+        function storeBaseParameters() {
+            // Store current parameter values as base values for audio reactivity
+            baseParameterValues = {};
+            Object.keys(parameters).forEach(key => {
+                baseParameterValues[key] = parameters[key].value;
+            });
+        }
+
+        function restoreBaseParameters() {
+            // Restore parameters to their base values
+            Object.keys(baseParameterValues).forEach(key => {
+                if (parameters[key]) {
+                    parameters[key].value = baseParameterValues[key];
+                }
+            });
+            updateDisplay();
+        }
+
+        function analyzeAudio() {
+            if (!analyser || !audioData || !audioReactive || !audioPlaying) {
+                return { bass: 0, mid: 0, treble: 0, overall: 0 };
+            }
+            
+            analyser.getByteFrequencyData(audioData);
+            
+            // Frequency ranges (approximate for 44.1kHz sample rate)
+            const bassRange = { start: 0, end: 32 };      // ~20-250Hz
+            const midRange = { start: 32, end: 128 };     // ~250-2000Hz  
+            const trebleRange = { start: 128, end: 256 }; // ~2000-8000Hz
+            
+            function getAverageVolume(range) {
+                let sum = 0;
+                for (let i = range.start; i < range.end && i < audioData.length; i++) {
+                    sum += audioData[i];
+                }
+                return sum / (range.end - range.start) / 255.0;
+            }
+            
+            const bass = getAverageVolume(bassRange);
+            const mid = getAverageVolume(midRange);
+            const treble = getAverageVolume(trebleRange);
+            const overall = (bass + mid + treble) / 3.0;
+            
+            return { bass, mid, treble, overall };
+        }
+
+        function applyAudioReactivity() {
+            if (!audioReactive || !audioPlaying) return;
+            
+            const audioLevels = analyzeAudio();
+            
+            // Apply audio modulation to parameters (relative to base values)
+            const bassInfluence = audioLevels.bass * 2.0;
+            const midInfluence = audioLevels.mid * 1.5;
+            const trebleInfluence = audioLevels.treble * 1.0;
+            
+            // Bass affects truchet radius and zoom
+            if (baseParameterValues.truchet_radius !== undefined) {
+                const baseRadius = baseParameterValues.truchet_radius;
+                parameters.truchet_radius.value = baseRadius + (bassInfluence * 0.3);
+                parameters.truchet_radius.value = Math.max(parameters.truchet_radius.min, 
+                    Math.min(parameters.truchet_radius.max, parameters.truchet_radius.value));
+            }
+            
+            if (baseParameterValues.zoom_level !== undefined) {
+                const baseZoom = baseParameterValues.zoom_level;
+                parameters.zoom_level.value = baseZoom + (bassInfluence * 0.5);
+                parameters.zoom_level.value = Math.max(parameters.zoom_level.min, 
+                    Math.min(parameters.zoom_level.max, parameters.zoom_level.value));
+            }
+            
+            // Mid frequencies affect rotation speed
+            if (baseParameterValues.rotation_speed !== undefined) {
+                const baseRotation = baseParameterValues.rotation_speed;
+                parameters.rotation_speed.value = baseRotation + (midInfluence * 0.1);
+                parameters.rotation_speed.value = Math.max(parameters.rotation_speed.min, 
+                    Math.min(parameters.rotation_speed.max, parameters.rotation_speed.value));
+            }
+            
+            // Treble affects kaleidoscope segments and color intensity
+            if (baseParameterValues.kaleidoscope_segments !== undefined) {
+                const baseSegments = baseParameterValues.kaleidoscope_segments;
+                let newSegments = baseSegments + (trebleInfluence * 20.0);
+                newSegments = Math.round(newSegments / 2) * 2; // Keep even
+                parameters.kaleidoscope_segments.value = Math.max(parameters.kaleidoscope_segments.min, 
+                    Math.min(parameters.kaleidoscope_segments.max, newSegments));
+            }
+            
+            if (baseParameterValues.color_intensity !== undefined) {
+                const baseIntensity = baseParameterValues.color_intensity;
+                parameters.color_intensity.value = baseIntensity + (trebleInfluence * 0.8);
+                parameters.color_intensity.value = Math.max(parameters.color_intensity.min, 
+                    Math.min(parameters.color_intensity.max, parameters.color_intensity.value));
+            }
+            
+            // Overall volume affects fly speed
+            if (baseParameterValues.fly_speed !== undefined) {
+                const baseSpeed = baseParameterValues.fly_speed;
+                parameters.fly_speed.value = baseSpeed + (audioLevels.overall * 1.0);
+                parameters.fly_speed.value = Math.max(parameters.fly_speed.min, 
+                    Math.min(parameters.fly_speed.max, parameters.fly_speed.value));
+            }
+        }
+
+        function render() {
+            try {
+                const deltaTime = 1.0 / 60.0;
+
+                // Apply audio reactivity before updating time accumulation
+                if (audioReactive && audioPlaying) {
+                    applyAudioReactivity();
+                }
+
+                if (!animationPaused) {
+                    timeAccumulation.camera_position += parameters.fly_speed.value * deltaTime;
+                    timeAccumulation.rotation_time += parameters.rotation_speed.value * deltaTime;
+                    timeAccumulation.plane_rotation_time += parameters.plane_rotation_speed.value * deltaTime;
+                    timeAccumulation.color_time += parameters.color_speed.value * deltaTime;
+                }
+
+                gl.viewport(0, 0, canvas.width, canvas.height);
+                gl.useProgram(program);
+                
+                // Set all uniforms
+                gl.uniform2f(uniforms.u_resolution, canvas.width, canvas.height);
+                gl.uniform1f(uniforms.u_time, performance.now() * 0.001);
+                gl.uniform1f(uniforms.u_camera_position, timeAccumulation.camera_position);
+                gl.uniform1f(uniforms.u_rotation_time, timeAccumulation.rotation_time);
+                gl.uniform1f(uniforms.u_plane_rotation_time, timeAccumulation.plane_rotation_time);
+                gl.uniform1f(uniforms.u_color_time, timeAccumulation.color_time);
+                gl.uniform1f(uniforms.u_fly_speed, parameters.fly_speed.value);
+                gl.uniform1f(uniforms.u_contrast, parameters.contrast.value);
+                gl.uniform1f(uniforms.u_kaleidoscope_segments, parameters.kaleidoscope_segments.value);
+                gl.uniform1f(uniforms.u_layer_count, parameters.layer_count.value);
+                gl.uniform1f(uniforms.u_truchet_radius, parameters.truchet_radius.value);
+                gl.uniform1f(uniforms.u_center_fill_radius, parameters.center_fill_radius.value);
+                gl.uniform1f(uniforms.u_rotation_speed, parameters.rotation_speed.value);
+                gl.uniform1f(uniforms.u_plane_rotation_speed, parameters.plane_rotation_speed.value);
+                gl.uniform1f(uniforms.u_zoom_level, parameters.zoom_level.value);
+                gl.uniform1f(uniforms.u_color_intensity, parameters.color_intensity.value);
+                gl.uniform1f(uniforms.u_camera_tilt_x, parameters.camera_tilt_x.value);
+                gl.uniform1f(uniforms.u_camera_tilt_y, parameters.camera_tilt_y.value);
+                gl.uniform1f(uniforms.u_camera_roll, parameters.camera_roll.value);
+                gl.uniform1f(uniforms.u_path_stability, parameters.path_stability.value);
+                gl.uniform1f(uniforms.u_path_scale, parameters.path_scale.value);
+                gl.uniform1f(uniforms.u_color_speed, parameters.color_speed.value);
+                gl.uniform1f(uniforms.u_use_color_palette, useColorPalette ? 1.0 : 0.0);
+                gl.uniform1f(uniforms.u_invert_colors, invertColors ? 1.0 : 0.0);
+                
+                const palette = colorPalettes[currentPaletteIndex];
+                gl.uniform3f(uniforms.u_palette_a, palette.a[0], palette.a[1], palette.a[2]);
+                gl.uniform3f(uniforms.u_palette_b, palette.b[0], palette.b[1], palette.b[2]);
+                gl.uniform3f(uniforms.u_palette_c, palette.c[0], palette.c[1], palette.c[2]);
+                gl.uniform3f(uniforms.u_palette_d, palette.d[0], palette.d[1], palette.d[2]);
+                
+                gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                
+                requestAnimationFrame(render);
+            } catch (error) {
+                updateStatus(`Render error: ${error.message}`, 'error');
+            }
+        }
+
+        // Initialize when page loads
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
