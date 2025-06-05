@@ -3,17 +3,56 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kaldao Fractal Visualizer - Complete</title>
+    <title>Kaldao Fractal Visualizer</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: #000; color: #fff; font-family: 'Courier New', monospace; overflow: hidden; }
+        body { 
+            background: #000; 
+            color: #fff; 
+            font-family: 'Courier New', monospace; 
+            overflow: hidden; 
+        }
         #canvas { display: block; }
-        .ui { position: absolute; top: 20px; left: 20px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px; font-size: 14px; max-width: 400px; transition: opacity 0.3s ease; }
-        .controls { position: absolute; top: 20px; right: 20px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px; font-size: 12px; transition: opacity 0.3s ease; }
-        .menu { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.95); padding: 20px; border-radius: 12px; border: 2px solid #444; max-width: 95vw; max-height: 90vh; overflow-y: auto; z-index: 1000; }
+        
+        .ui { 
+            position: absolute; 
+            top: 20px; 
+            left: 20px; 
+            background: rgba(0,0,0,0.8); 
+            padding: 15px; 
+            border-radius: 8px; 
+            font-size: 14px; 
+            max-width: 400px; 
+            transition: opacity 0.3s ease; 
+        }
+        
+        .controls { 
+            position: absolute; 
+            top: 20px; 
+            right: 20px; 
+            background: rgba(0,0,0,0.8); 
+            padding: 15px; 
+            border-radius: 8px; 
+            font-size: 12px; 
+            transition: opacity 0.3s ease; 
+        }
+        
+        .menu { 
+            position: absolute; 
+            top: 50%; 
+            left: 50%; 
+            transform: translate(-50%, -50%); 
+            background: rgba(0,0,0,0.95); 
+            padding: 20px; 
+            border-radius: 12px; 
+            border: 2px solid #444; 
+            max-width: 95vw; 
+            max-height: 90vh; 
+            overflow-y: auto; 
+            z-index: 1000; 
+        }
+        
         .menu h2 { color: #4CAF50; margin-bottom: 20px; text-align: center; }
-        .menu .section { margin-bottom: 15px; }
-        .menu .section h3 { color: #FFC107; margin-bottom: 8px; }
         .hidden { opacity: 0; pointer-events: none; }
         .error { color: #ff4444; }
         .success { color: #44ff44; }
@@ -48,7 +87,6 @@
         ESC Toggle all parameters<br>
     </div>
 
-    <!-- All Parameters Display -->
     <div class="menu hidden" id="menu">
         <div style="display: flex; gap: 20px; width: 100%;">
             <div style="flex: 1; min-width: 300px;">
@@ -90,7 +128,7 @@
     </div>
 
     <script>
-        // Global variables
+        // ===== GLOBAL VARIABLES =====
         let gl, canvas, program;
         let animationPaused = false;
         let currentParameterIndex = 0;
@@ -99,15 +137,15 @@
         let invertColors = false;
         let menuVisible = false;
         
-        // State persistence
+        // State management
         let stateLoaded = false;
         let autoSaveTimeout = null;
-        const AUTO_SAVE_DELAY = 2000; // Auto-save after 2 seconds of inactivity
+        const AUTO_SAVE_DELAY = 2000;
         
-        // Controls menu auto-fade system
+        // Controls auto-fade
         let controlsVisible = true;
         let controlsFadeTimeout = null;
-        const CONTROLS_FADE_DELAY = 3000; // 3 seconds
+        const CONTROLS_FADE_DELAY = 3000;
         
         // Mobile detection and touch handling
         let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -120,7 +158,7 @@
         
         // Shake detection
         let lastAcceleration = { x: 0, y: 0, z: 0 };
-        let shakeThreshold = 25; // Increased from 15 to make it less sensitive
+        let shakeThreshold = 25;
         let shakeTimeout = null;
         
         // Audio system
@@ -133,24 +171,13 @@
         let audioPlaying = false;
         let baseParameterValues = {};
         
-        // Audio modifiers - these multiply the base parameters
+        // Audio modifiers
         let audioModifiers = {
-            fly_speed: 1.0,
-            contrast: 1.0,
-            kaleidoscope_segments: 1.0,
-            truchet_radius: 1.0,
-            center_fill_radius: 1.0,
-            layer_count: 1.0,
-            rotation_speed: 1.0,
-            zoom_level: 1.0,
-            color_intensity: 1.0,
-            plane_rotation_speed: 1.0,
-            camera_tilt_x: 1.0,
-            camera_tilt_y: 1.0,
-            camera_roll: 1.0,
-            path_stability: 1.0,
-            path_scale: 1.0,
-            color_speed: 1.0
+            fly_speed: 1.0, contrast: 1.0, kaleidoscope_segments: 1.0,
+            truchet_radius: 1.0, center_fill_radius: 1.0, layer_count: 1.0,
+            rotation_speed: 1.0, zoom_level: 1.0, color_intensity: 1.0,
+            plane_rotation_speed: 1.0, camera_tilt_x: 1.0, camera_tilt_y: 1.0,
+            camera_roll: 1.0, path_stability: 1.0, path_scale: 1.0, color_speed: 1.0
         };
         
         // Microphone system
@@ -163,7 +190,7 @@
         let redoStack = [];
         const maxUndoSteps = 50;
 
-        // Parameters - exact match to Godot
+        // ===== PARAMETERS =====
         const parameters = {
             fly_speed: { value: 0.25, min: -3.0, max: 3.0, step: 0.1, name: "Fly Speed" },
             contrast: { value: 1.0, min: 0.1, max: 5.0, step: 0.1, name: "Contrast" },
@@ -202,19 +229,15 @@
             { name: "Sunset", a: [0.7, 0.3, 0.2], b: [0.3, 0.2, 0.1], c: [1.5, 1.0, 0.8], d: [0.0, 0.1, 0.3] }
         ];
 
-        // Parameter keys in the order they appear in the menu display
+        // Parameter keys in display order
         const parameterKeys = [
-            // MOVEMENT & ANIMATION
             'fly_speed', 'rotation_speed', 'plane_rotation_speed', 'zoom_level',
-            // PATTERN & VISUAL  
             'kaleidoscope_segments', 'truchet_radius', 'center_fill_radius', 'layer_count', 'contrast', 'color_intensity',
-            // CAMERA & PATH
             'camera_tilt_x', 'camera_tilt_y', 'camera_roll', 'path_stability', 'path_scale',
-            // COLOR & SPEED
             'color_speed'
         ];
 
-        // Shaders
+        // ===== SHADERS =====
         const vertexShaderSource = `
             attribute vec2 a_position;
             void main() {
@@ -342,9 +365,8 @@
                 vec2 hp = p;
                 vec2 hpp = toPolar(hp);
                 
-                // Manual rounding: floor(x + 0.5) for smoother transitions
                 float evenRep = floor(rep * 0.5 + 0.5) * 2.0;
-                evenRep = max(evenRep, 4.0); // Minimum of 4 segments
+                evenRep = max(evenRep, 4.0);
                 
                 float rn = modMirror1(hpp.y, 2.0 * PI / evenRep);
                 
@@ -573,9 +595,9 @@
             }
         `;
 
-        // Uniform locations
         let uniforms = {};
 
+        // ===== INITIALIZATION =====
         function init() {
             try {
                 canvas = document.getElementById('canvas');
@@ -588,17 +610,10 @@
                 setupShaders();
                 setupGeometry();
                 setupUniforms();
-                
-                // Load saved state before setting up controls
-                loadStateFromStorage();
-                
                 setupControls();
                 
                 updateStatus('✅ Kaldao loaded successfully!', 'success');
                 updateDisplay();
-                // Start controls auto-fade timer
-                showControls();
-                
                 render();
                 
             } catch (error) {
@@ -669,154 +684,21 @@
             });
         }
 
-        // Controls auto-fade functions
-        function showControls() {
-            const controls = document.getElementById('controls');
-            if (controls && !menuVisible) {
-                controls.classList.remove('hidden');
-                ui.classList.remove('hidden');
-                controlsVisible = true;
-                
-                // Clear existing timeout
-                if (controlsFadeTimeout) {
-                    clearTimeout(controlsFadeTimeout);
-                }
-                
-                // Set new timeout to hide controls
-                controlsFadeTimeout = setTimeout(() => {
-                    hideControls();
-                }, CONTROLS_FADE_DELAY);
-            }
-        }
-        
-        function hideControls() {
-            const controls = document.getElementById('controls');
-            if (controls && !menuVisible) {
-                controls.classList.add('hidden');
-                controlsVisible = false;
-                ui.classList.add('hidden');
-            }
-        }
-        
-        function resetControlsFadeTimer() {
-            if (!menuVisible) {
-                showControls();
-            }
-        }
-
         function setupControls() {
-            // Desktop keyboard controls
             document.addEventListener('keydown', (e) => {
-                if (isMobile) return; // Skip keyboard on mobile
-                
-                try {
-                    // Reset controls fade timer on any keypress
-                    resetControlsFadeTimer();
-                    
-                    switch(e.code) {
-                        case 'ArrowUp':
-                            e.preventDefault();
-                            switchParameter(-1);
-                            break;
-                        case 'ArrowDown':
-                            e.preventDefault();
-                            switchParameter(1);
-                            break;
-                        case 'ArrowLeft':
-                            e.preventDefault();
-                            adjustParameter(-1);
-                            break;
-                        case 'ArrowRight':
-                            e.preventDefault();
-                            adjustParameter(1);
-                            break;
-                        case 'Space':
-                            e.preventDefault();
-                            animationPaused = !animationPaused;
-                            updateStatus(`Animation: ${animationPaused ? 'PAUSED' : 'RUNNING'}`, 'info');
-                            break;
-                        case 'KeyC':
-                            e.preventDefault();
-                            if (e.shiftKey) {
-                                resetToBlackWhite();
-                            } else {
-                                randomizeColors();
-                            }
-                            break;
-                        case 'KeyR':
-                            e.preventDefault();
-                            if (e.shiftKey) {
-                                if (confirm('Reset all parameters?')) {
-                                    resetAllParameters();
-                                }
-                            } else {
-                                resetCurrentParameter();
-                            }
-                            break;
-                        case 'Period':
-                            e.preventDefault();
-                            randomizeParameters();
-                            break;
-                        case 'KeyI':
-                            e.preventDefault();
-                            toggleInvertColors();
-                            break;
-                        case 'KeyS':
-                            e.preventDefault();
-                            saveParameters();
-                            break;
-                        case 'KeyL':
-                            e.preventDefault();
-                            loadParameters();
-                            break;
-                        case 'Escape':
-                            e.preventDefault();
-                            toggleMenu();
-                            break;
-                        case 'KeyA':
-                            e.preventDefault();
-                            toggleAudio();
-                            break;
-                        case 'KeyZ':
-                            e.preventDefault();
-                            if (e.ctrlKey || e.metaKey) {
-                                undo();
-                            }
-                            break;
-                        case 'KeyY':
-                            e.preventDefault();
-                            if (e.ctrlKey || e.metaKey) {
-                                redo();
-                            }
-                            break;
-                        case 'KeyM':
-                            e.preventDefault();
-                            toggleMicrophone();
-                            break;
-                    }
-                } catch (error) {
-                    updateStatus(`Input error: ${error.message}`, 'error');
+                switch(e.code) {
+                    case 'ArrowUp': e.preventDefault(); switchParameter(-1); break;
+                    case 'ArrowDown': e.preventDefault(); switchParameter(1); break;
+                    case 'ArrowLeft': e.preventDefault(); adjustParameter(-1); break;
+                    case 'ArrowRight': e.preventDefault(); adjustParameter(1); break;
+                    case 'Space': e.preventDefault(); animationPaused = !animationPaused; break;
+                    case 'KeyC': e.preventDefault(); randomizeColors(); break;
+                    case 'KeyR': e.preventDefault(); resetCurrentParameter(); break;
+                    case 'Period': e.preventDefault(); randomizeParameters(); break;
+                    case 'KeyI': e.preventDefault(); toggleInvertColors(); break;
+                    case 'Escape': e.preventDefault(); toggleMenu(); break;
                 }
             });
-
-            // Mobile touch controls
-            if (isMobile) {
-                setupMobileControls();
-                
-                // Hide desktop controls on mobile
-                const controls = document.getElementById('controls');
-                if (controls) {
-                    controls.style.display = 'none';
-                }
-                
-                // Make UI more mobile friendly
-                const ui = document.getElementById('ui');
-                if (ui) {
-                    ui.style.fontSize = '16px';
-                    ui.style.padding = '20px';
-                    ui.style.maxWidth = '90vw';
-                }
-            }
 
             window.addEventListener('resize', () => {
                 if (canvas && gl) {
@@ -825,199 +707,6 @@
                     gl.viewport(0, 0, canvas.width, canvas.height);
                 }
             });
-        }
-
-        function setupMobileControls() {
-            // Touch event listeners
-            canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-            canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-            canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
-            
-            // Device motion for shake detection
-            if (window.DeviceMotionEvent) {
-                window.addEventListener('devicemotion', handleDeviceMotion);
-            }
-        }
-
-        function handleTouchStart(e) {
-            e.preventDefault();
-            const touch = e.touches[0];
-            touchStartTime = Date.now();
-            touchStartX = touch.clientX;
-            touchStartY = touch.clientY;
-            isLongPress = false;
-            isDragging = false;
-            
-            // Start long press timer
-            setTimeout(() => {
-                if (!isDragging && Date.now() - touchStartTime >= 800) {
-                    isLongPress = true;
-                    // Vibrate if available
-                    if (navigator.vibrate) navigator.vibrate(100);
-                    resetAllParameters(); // Changed to reset ALL parameters
-                    updateStatus('📱 All parameters reset!', 'success');
-                    // Auto-hide status after 2 seconds
-                    setTimeout(() => {
-                        if (!menuVisible) {
-                            const ui = document.getElementById('ui');
-                            if (ui) ui.classList.add('hidden');
-                        }
-                    }, 2000);
-                }
-            }, 800);
-        }
-
-        function handleTouchMove(e) {
-            e.preventDefault();
-            if (isLongPress) return;
-            
-            const touch = e.touches[0];
-            const deltaX = touch.clientX - touchStartX;
-            const deltaY = touch.clientY - touchStartY;
-            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-            
-            if (distance > 15) { // Increased threshold for less sensitivity
-                isDragging = true;
-                
-                // Vertical swipe: adjust parameter value (like a fader)
-                if (Math.abs(deltaY) > Math.abs(deltaX)) {
-                    const sensitivity = 0.003; // Reduced from 0.01 to make it less sensitive
-                    const delta = -deltaY * sensitivity; // Invert Y (up = increase)
-                    adjustParameterSmooth(delta);
-                    
-                    // Update start position for continuous dragging
-                    touchStartY = touch.clientY;
-                }
-                // Horizontal swipe: change parameter
-                else {
-                    const swipeSpeed = Math.abs(deltaX) / (Date.now() - touchStartTime);
-                    
-                    // Quick swipe: discrete parameter change
-                    if (swipeSpeed > 0.5 && Math.abs(deltaX) > 60) {
-                        const direction = deltaX > 0 ? 1 : -1;
-                        switchParameter(direction);
-                        updateStatus(`📱 ${parameters[parameterKeys[currentParameterIndex]].name}`, 'info');
-                        
-                        // Auto-hide status after 1.5 seconds
-                        setTimeout(() => {
-                            if (!menuVisible) {
-                                const ui = document.getElementById('ui');
-                                if (ui) ui.classList.add('hidden');
-                            }
-                        }, 1500);
-                        
-                        // Reset touch start to prevent multiple switches
-                        touchStartX = touch.clientX;
-                        touchStartY = touch.clientY;
-                        touchStartTime = Date.now();
-                    }
-                    // Slow drag: continuous cycling through parameters
-                    else if (Math.abs(deltaX) > 40) {
-                        const parameterSpacing = 80; // pixels per parameter
-                        const parameterIndex = Math.floor(Math.abs(deltaX) / parameterSpacing);
-                        const direction = deltaX > 0 ? 1 : -1;
-                        const targetIndex = (currentParameterIndex + (direction * parameterIndex) + parameterKeys.length) % parameterKeys.length;
-                        
-                        if (targetIndex !== currentParameterIndex) {
-                            currentParameterIndex = targetIndex;
-                            updateDisplay();
-                            updateStatus(`📱 ${parameters[parameterKeys[currentParameterIndex]].name}`, 'info');
-                            
-                            // Auto-hide status after 1.5 seconds
-                            setTimeout(() => {
-                                if (!menuVisible) {
-                                    const ui = document.getElementById('ui');
-                                    if (ui) ui.classList.add('hidden');
-                                }
-                            }, 1500);
-                        }
-                    }
-                }
-            }
-        }
-
-        function handleTouchEnd(e) {
-            e.preventDefault();
-            const touchDuration = Date.now() - touchStartTime;
-            
-            // Simple tap (not long press, not drag)
-            if (!isLongPress && !isDragging && touchDuration < 300) {
-                // Double tap detection
-                const now = Date.now();
-                if (now - lastTouchTime < 300) {
-                    // Double tap - randomize colors
-                    randomizeColors();
-                    updateStatus('📱 Colors randomized!', 'success');
-                    
-                    // Auto-hide status after 2 seconds
-                    setTimeout(() => {
-                        if (!menuVisible) {
-                            const ui = document.getElementById('ui');
-                            if (ui) ui.classList.add('hidden');
-                        }
-                    }, 2000);
-                } else {
-                    // Single tap - toggle menu
-                    toggleMenu();
-                }
-                lastTouchTime = now;
-            }
-            
-            // Reset touch state
-            isLongPress = false;
-            isDragging = false;
-        }
-
-        function handleDeviceMotion(e) {
-            const acceleration = e.accelerationIncludingGravity;
-            if (!acceleration) return;
-            
-            const deltaX = Math.abs(acceleration.x - lastAcceleration.x);
-            const deltaY = Math.abs(acceleration.y - lastAcceleration.y);
-            const deltaZ = Math.abs(acceleration.z - lastAcceleration.z);
-            
-            const totalDelta = deltaX + deltaY + deltaZ;
-            
-            if (totalDelta > shakeThreshold) {
-                // Prevent multiple shake detections
-                if (!shakeTimeout) {
-                    randomizeParameters();
-                    updateStatus('📱 Shake detected! Parameters randomized!', 'success');
-                    if (navigator.vibrate) navigator.vibrate([50, 100, 50]);
-                    
-                    // Auto-hide status after 3 seconds
-                    setTimeout(() => {
-                        if (!menuVisible) {
-                            const ui = document.getElementById('ui');
-                            if (ui) ui.classList.add('hidden');
-                        }
-                    }, 3000);
-                    
-                    shakeTimeout = setTimeout(() => {
-                        shakeTimeout = null;
-                    }, 1000);
-                }
-            }
-            
-            lastAcceleration = { x: acceleration.x, y: acceleration.y, z: acceleration.z };
-        }
-
-        function adjustParameterSmooth(delta) {
-            // Save current state before making changes
-            saveStateForUndo();
-            
-            const paramKey = parameterKeys[currentParameterIndex];
-            const param = parameters[paramKey];
-            
-            // Use smaller steps for smooth mobile control
-            const step = param.step * 0.5;
-            param.value = Math.max(param.min, Math.min(param.max, param.value + delta * (param.max - param.min)));
-            
-            if (paramKey === 'kaleidoscope_segments') {
-                param.value = Math.round(param.value / 2) * 2;
-            }
-            
-            updateDisplay();
         }
 
         function updateStatus(message, type = 'info') {
@@ -1035,28 +724,15 @@
             
             const paramDiv = document.getElementById('currentParam');
             if (paramDiv) {
-                paramDiv.textContent = `${param.name}: ${param.value.toFixed(3)} | ${palette.name}${invertColors ? ' (Inverted)' : ''}`;
+                paramDiv.textContent = `${param.name}: ${param.value.toFixed(3)} | ${palette.name}`;
             }
-            
-            // Update menu if visible
-            updateMenuDisplay();
         }
 
         function adjustParameter(delta) {
-            // Save current state before making changes
-            saveStateForUndo();
-            
             const paramKey = parameterKeys[currentParameterIndex];
             const param = parameters[paramKey];
-            
             param.value = Math.max(param.min, Math.min(param.max, param.value + delta * param.step));
-            
-            if (paramKey === 'kaleidoscope_segments') {
-                param.value = Math.round(param.value / 2) * 2;
-            }
-            
             updateDisplay();
-            scheduleAutoSave();
         }
 
         function switchParameter(delta) {
@@ -1065,9 +741,6 @@
         }
 
         function randomizeColors() {
-            // Save current state before making changes
-            saveStateForUndo();
-            
             const palette = colorPalettes[currentPaletteIndex];
             for (let i = 0; i < 3; i++) {
                 palette.a[i] = Math.random();
@@ -1075,92 +748,27 @@
                 palette.c[i] = Math.random() * 2.0;
                 palette.d[i] = Math.random();
             }
-            
             if (currentPaletteIndex === 0) {
                 currentPaletteIndex = 1;
                 useColorPalette = true;
             }
-            
-            updateDisplay();
-        }
-
-        function resetToBlackWhite() {
-            // Save current state before making changes
-            saveStateForUndo();
-            
-            currentPaletteIndex = 0;
-            useColorPalette = false;
-            invertColors = false;
             updateDisplay();
         }
 
         function toggleInvertColors() {
-            // Save current state before making changes
-            saveStateForUndo();
-            
             invertColors = !invertColors;
             updateDisplay();
         }
 
         function randomizeParameters() {
-            // Save current state before making changes
-            saveStateForUndo();
-            
-            const excludeParams = ['color_intensity', 'color_speed'];
-            
-            // Define reasonable randomization ranges (subset of full parameter ranges)
-            const randomRanges = {
-                fly_speed: { min: -1.0, max: 2.0 },
-                contrast: { min: 0.5, max: 3.0 },
-                kaleidoscope_segments: { min: 6.0, max: 32.0 },
-                truchet_radius: { min: 0.1, max: 0.8 },
-                center_fill_radius: { min: -0.5, max: 0.5 },
-                layer_count: { min: 4, max: 8 },
-                rotation_speed: { min: -2.0, max: 2.0 },
-                zoom_level: { min: 0.1, max: 2.0 },
-                plane_rotation_speed: { min: -2.0, max: 2.0 },
-                camera_tilt_x: { min: -3.0, max: 3.0 },
-                camera_tilt_y: { min: -3.0, max: 3.0 },
-                camera_roll: { min: -1.0, max: 1.0 },
-                path_stability: { min: -0.5, max: 1.0 },
-                path_scale: { min: 0.5, max: 2.0 }
-            };
-            
             Object.keys(parameters).forEach(key => {
-                if (excludeParams.includes(key)) return;
-                
                 const param = parameters[key];
-                const range = randomRanges[key];
-                
-                if (range) {
-                    // Use reasonable range for randomization
-                    param.value = Math.random() * (range.max - range.min) + range.min;
-                } else {
-                    // Fallback to full range if not specified
-                    param.value = Math.random() * (param.max - param.min) + param.min;
-                }
-                
-                param.value = Math.round(param.value / param.step) * param.step;
-                
-                if (key === 'kaleidoscope_segments') {
-                    param.value = Math.round(param.value / 2) * 2;
-                }
-                
-                // Clamp to actual parameter bounds
-                param.value = Math.max(param.min, Math.min(param.max, param.value));
+                param.value = Math.random() * (param.max - param.min) + param.min;
             });
-            
             updateDisplay();
-            scheduleAutoSave();
         }
 
         function resetCurrentParameter() {
-            // Save current state before making changes
-            saveStateForUndo();
-            
-            const paramKey = parameterKeys[currentParameterIndex];
-            const param = parameters[paramKey];
-            
             const defaults = {
                 fly_speed: 0.25, contrast: 1.0, kaleidoscope_segments: 10.0,
                 truchet_radius: 0.35, center_fill_radius: 0.0, layer_count: 6,
@@ -1169,853 +777,62 @@
                 camera_roll: 0.0, path_stability: 1.0, path_scale: 1.0, color_speed: 0.5
             };
             
+            const paramKey = parameterKeys[currentParameterIndex];
             if (defaults[paramKey] !== undefined) {
-                param.value = defaults[paramKey];
+                parameters[paramKey].value = defaults[paramKey];
             }
-            
             updateDisplay();
-        }
-
-        function resetAllParameters() {
-            // Save current state before making changes
-            saveStateForUndo();
-            
-            Object.keys(parameters).forEach(key => {
-                const defaults = {
-                    fly_speed: 0.25, contrast: 1.0, kaleidoscope_segments: 10.0,
-                    truchet_radius: 0.35, center_fill_radius: 0.0, layer_count: 6,
-                    rotation_speed: 0.025, zoom_level: 0.3, color_intensity: 1.0,
-                    plane_rotation_speed: 0.5, camera_tilt_x: 0.0, camera_tilt_y: 0.0,
-                    camera_roll: 0.0, path_stability: 1.0, path_scale: 1.0, color_speed: 0.5
-                };
-                
-                if (defaults[key] !== undefined) {
-                    parameters[key].value = defaults[key];
-                }
-            });
-            
-            currentPaletteIndex = 0;
-            useColorPalette = false;
-            invertColors = false;
-            
-            updateDisplay();
-            updateMenuDisplay();
-        }
-
-        // Undo/Redo System Functions
-        function saveStateForUndo() {
-            // Create a snapshot of the current state
-            const state = {
-                parameters: {},
-                currentPaletteIndex: currentPaletteIndex,
-                useColorPalette: useColorPalette,
-                invertColors: invertColors,
-                palettes: JSON.parse(JSON.stringify(colorPalettes)) // Deep copy
-            };
-            
-            // Copy parameter values
-            Object.keys(parameters).forEach(key => {
-                state.parameters[key] = parameters[key].value;
-            });
-            
-            // Add to undo stack
-            undoStack.push(state);
-            
-            // Limit stack size
-            if (undoStack.length > maxUndoSteps) {
-                undoStack.shift();
-            }
-            
-            // Clear redo stack when new action is performed
-            redoStack = [];
-        }
-
-        function undo() {
-            if (undoStack.length === 0) {
-                updateStatus('Nothing to undo', 'info');
-                return;
-            }
-            
-            // Save current state to redo stack
-            const currentState = {
-                parameters: {},
-                currentPaletteIndex: currentPaletteIndex,
-                useColorPalette: useColorPalette,
-                invertColors: invertColors,
-                palettes: JSON.parse(JSON.stringify(colorPalettes))
-            };
-            
-            Object.keys(parameters).forEach(key => {
-                currentState.parameters[key] = parameters[key].value;
-            });
-            
-            redoStack.push(currentState);
-            
-            // Restore previous state
-            const previousState = undoStack.pop();
-            restoreState(previousState);
-            
-            updateStatus(`⟲ Undone (${undoStack.length} steps remaining)`, 'success');
-        }
-
-        function redo() {
-            if (redoStack.length === 0) {
-                updateStatus('Nothing to redo', 'info');
-                return;
-            }
-            
-            // Save current state to undo stack
-            const currentState = {
-                parameters: {},
-                currentPaletteIndex: currentPaletteIndex,
-                useColorPalette: useColorPalette,
-                invertColors: invertColors,
-                palettes: JSON.parse(JSON.stringify(colorPalettes))
-            };
-            
-            Object.keys(parameters).forEach(key => {
-                currentState.parameters[key] = parameters[key].value;
-            });
-            
-            undoStack.push(currentState);
-            
-            // Restore next state
-            const nextState = redoStack.pop();
-            restoreState(nextState);
-            
-            updateStatus(`⟳ Redone (${redoStack.length} steps available)`, 'success');
-        }
-
-        function restoreState(state) {
-            // Restore parameters
-            Object.keys(state.parameters).forEach(key => {
-                if (parameters[key]) {
-                    parameters[key].value = state.parameters[key];
-                }
-            });
-            
-            // Restore color palette state
-            currentPaletteIndex = state.currentPaletteIndex;
-            useColorPalette = state.useColorPalette;
-            invertColors = state.invertColors;
-            
-            // Restore palette data
-            if (state.palettes) {
-                state.palettes.forEach((palette, index) => {
-                    if (colorPalettes[index]) {
-                        colorPalettes[index] = { ...palette };
-                    }
-                });
-            }
-            
-            updateDisplay();
-            updateMenuDisplay();
         }
 
         function toggleMenu() {
             menuVisible = !menuVisible;
             const menu = document.getElementById('menu');
-            const ui = document.getElementById('ui');
-            const controls = document.getElementById('controls');
-            
             if (menuVisible) {
                 menu.classList.remove('hidden');
-                ui.classList.add('hidden');
-                controls.classList.add('hidden');
                 updateMenuDisplay();
             } else {
                 menu.classList.add('hidden');
-                ui.classList.remove('hidden');
-                controls.classList.remove('hidden');
             }
         }
 
         function updateMenuDisplay() {
-            if (!menuVisible) return;
-            
-            // Update ALL parameters list with organized categories
             const allParamsList = document.getElementById('allParametersList');
             if (allParamsList) {
-                let paramsHTML = '';
-                
-                // Add mobile instructions if on mobile
-                if (isMobile) {
-                    paramsHTML += '<div style="color: #4CAF50; font-weight: bold; margin-bottom: 10px; font-size: 14px;">📱 MOBILE CONTROLS</div>';
-                    paramsHTML += '<div style="color: #FFC107; font-size: 12px; margin-bottom: 15px; line-height: 1.4;">';
-                    paramsHTML += '• Tap: Toggle menu<br>';
-                    paramsHTML += '• Double tap: Random colors<br>';
-                    paramsHTML += '• Hold: Reset ALL parameters<br>';
-                    paramsHTML += '• Quick swipe ←/→: Change parameter<br>';
-                    paramsHTML += '• Drag ←/→: Scroll through parameters<br>';
-                    paramsHTML += '• Swipe ↑/↓: Adjust value<br>';
-                    paramsHTML += '• Shake: Random all<br>';
-                    paramsHTML += '</div>';
-                }
-                
-                // Movement & Animation
-                paramsHTML += '<div style="color: #4CAF50; font-weight: bold; margin-bottom: 5px;">MOVEMENT & ANIMATION</div>';
-                const movementParams = ['fly_speed', 'rotation_speed', 'plane_rotation_speed', 'zoom_level'];
-                movementParams.forEach(key => {
+                let html = '';
+                parameterKeys.forEach(key => {
                     const param = parameters[key];
-                    const index = parameterKeys.indexOf(key);
-                    const isCurrent = index === currentParameterIndex;
+                    const isCurrent = key === parameterKeys[currentParameterIndex];
                     const style = isCurrent ? 'color: #4CAF50; font-weight: bold;' : 'color: #ffffff;';
-                    const indicator = isCurrent && isMobile ? '👆 ' : '';
-                    paramsHTML += `<div style="${style}">${indicator}${param.name}: ${param.value.toFixed(3)}</div>`;
+                    html += `<div style="${style}">${param.name}: ${param.value.toFixed(3)}</div>`;
                 });
-                
-                paramsHTML += '<br>';
-                
-                // Pattern & Visual
-                paramsHTML += '<div style="color: #FFC107; font-weight: bold; margin-bottom: 5px;">PATTERN & VISUAL</div>';
-                const patternParams = ['kaleidoscope_segments', 'truchet_radius', 'center_fill_radius', 'layer_count', 'contrast', 'color_intensity'];
-                patternParams.forEach(key => {
-                    const param = parameters[key];
-                    const index = parameterKeys.indexOf(key);
-                    const isCurrent = index === currentParameterIndex;
-                    const style = isCurrent ? 'color: #4CAF50; font-weight: bold;' : 'color: #ffffff;';
-                    const indicator = isCurrent && isMobile ? '👆 ' : '';
-                    const value = key === 'kaleidoscope_segments' || key === 'layer_count' ? 
-                        param.value.toFixed(0) : param.value.toFixed(3);
-                    paramsHTML += `<div style="${style}">${indicator}${param.name}: ${value}</div>`;
-                });
-                
-                paramsHTML += '<br>';
-                
-                // Camera & Path
-                paramsHTML += '<div style="color: #9C27B0; font-weight: bold; margin-bottom: 5px;">CAMERA & PATH</div>';
-                const cameraParams = ['camera_tilt_x', 'camera_tilt_y', 'camera_roll', 'path_stability', 'path_scale'];
-                cameraParams.forEach(key => {
-                    const param = parameters[key];
-                    const index = parameterKeys.indexOf(key);
-                    const isCurrent = index === currentParameterIndex;
-                    const style = isCurrent ? 'color: #4CAF50; font-weight: bold;' : 'color: #ffffff;';
-                    const indicator = isCurrent && isMobile ? '👆 ' : '';
-                    paramsHTML += `<div style="${style}">${indicator}${param.name}: ${param.value.toFixed(3)}</div>`;
-                });
-                
-                paramsHTML += '<br>';
-                
-                // Color & Animation Speed
-                paramsHTML += '<div style="color: #FF5722; font-weight: bold; margin-bottom: 5px;">COLOR & SPEED</div>';
-                const colorParams = ['color_speed'];
-                colorParams.forEach(key => {
-                    const param = parameters[key];
-                    const index = parameterKeys.indexOf(key);
-                    const isCurrent = index === currentParameterIndex;
-                    const style = isCurrent ? 'color: #4CAF50; font-weight: bold;' : 'color: #ffffff;';
-                    const indicator = isCurrent && isMobile ? '👆 ' : '';
-                    paramsHTML += `<div style="${style}">${indicator}${param.name}: ${param.value.toFixed(3)}</div>`;
-                });
-                
-                allParamsList.innerHTML = paramsHTML;
-            }
-            
-            // Only show right column on desktop
-            const rightColumn = document.querySelector('.menu > div > div:nth-child(2)');
-            if (rightColumn) {
-                rightColumn.style.display = isMobile ? 'none' : 'block';
-            }
-            
-            if (!isMobile) {
-                // Update palettes list (desktop only)
-                const allPalettesList = document.getElementById('allPalettesList');
-                if (allPalettesList) {
-                    let palettesHTML = '';
-                    colorPalettes.forEach((palette, index) => {
-                        const isCurrent = index === currentPaletteIndex;
-                        const style = isCurrent ? 'color: #4CAF50; font-weight: bold;' : 'color: #ffffff;';
-                        const inverted = isCurrent && invertColors ? ' (Inverted)' : '';
-                        const active = isCurrent && useColorPalette ? ' ●' : (isCurrent ? ' ○' : '');
-                        palettesHTML += `<div style="${style}">${palette.name}${inverted}${active}</div>`;
-                    });
-                    allPalettesList.innerHTML = palettesHTML;
-                }
-                
-                // Update audio status (desktop only)
-                const allAudioStatus = document.getElementById('allAudioStatus');
-                if (allAudioStatus) {
-                    if (microphoneActive) {
-                        allAudioStatus.innerHTML = '🎤 <span style="color: #4CAF50;">Microphone Active</span><br>🔊 Audio Reactive: ON<br><em>Press M to stop</em>';
-                    } else if (!audioElement) {
-                        allAudioStatus.innerHTML = '🎵 No audio file loaded<br>🎤 Microphone: OFF<br>🔊 Audio Reactive: OFF<br><em>Press A for file, M for mic</em>';
-                    } else {
-                        const playStatus = audioPlaying ? '<span style="color: #4CAF50;">Playing</span>' : '<span style="color: #FF9800;">Paused</span>';
-                        const reactiveStatus = audioReactive ? '<span style="color: #4CAF50;">ON</span>' : '<span style="color: #FF9800;">OFF</span>';
-                        allAudioStatus.innerHTML = `🎵 File: ${playStatus}<br>🎤 Microphone: OFF<br>🔊 Audio Reactive: ${reactiveStatus}<br><em>Press A to toggle, M for mic</em>`;
-                    }
-                }
+                allParamsList.innerHTML = html;
             }
         }
 
-        function saveParameters() {
-            try {
-                const saveData = {
-                    parameters: {},
-                    palette: {
-                        currentPaletteIndex: currentPaletteIndex,
-                        useColorPalette: useColorPalette,
-                        invertColors: invertColors,
-                        palettes: colorPalettes
-                    },
-                    timeAccumulation: timeAccumulation,
-                    version: "1.0",
-                    timestamp: new Date().toISOString(),
-                    description: "Kaldao Fractal Visualizer Parameters"
-                };
-                
-                // Save parameter values
-                Object.keys(parameters).forEach(key => {
-                    saveData.parameters[key] = parameters[key].value;
-                });
-                
-                const jsonString = JSON.stringify(saveData, null, 2);
-                const blob = new Blob([jsonString], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `kaldao-fractal-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                
-                updateStatus('✅ Parameters saved to file!', 'success');
-                
-            } catch (error) {
-                updateStatus(`❌ Save failed: ${error.message}`, 'error');
-            }
-        }
-
-        function loadParameters() {
-            try {
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.accept = '.json';
-                
-                input.onchange = function(event) {
-                    const file = event.target.files[0];
-                    if (!file) return;
-                    
-                    const reader = new FileReader();
-                    reader.onload = function(e) {
-                        try {
-                            const saveData = JSON.parse(e.target.result);
-                            
-                            // Validate the save data
-                            if (!saveData.parameters || !saveData.palette) {
-                                throw new Error('Invalid save file format');
-                            }
-                            
-                            // Load parameters
-                            Object.keys(parameters).forEach(key => {
-                                if (saveData.parameters[key] !== undefined) {
-                                    parameters[key].value = saveData.parameters[key];
-                                }
-                            });
-                            
-                            // Load palette settings
-                            if (saveData.palette.currentPaletteIndex !== undefined) {
-                                currentPaletteIndex = saveData.palette.currentPaletteIndex;
-                            }
-                            if (saveData.palette.useColorPalette !== undefined) {
-                                useColorPalette = saveData.palette.useColorPalette;
-                            }
-                            if (saveData.palette.invertColors !== undefined) {
-                                invertColors = saveData.palette.invertColors;
-                            }
-                            if (saveData.palette.palettes) {
-                                // Copy custom palette data
-                                saveData.palette.palettes.forEach((palette, index) => {
-                                    if (colorPalettes[index]) {
-                                        colorPalettes[index] = { ...palette };
-                                    }
-                                });
-                            }
-                            
-                            // Load time accumulation if present
-                            if (saveData.timeAccumulation) {
-                                Object.assign(timeAccumulation, saveData.timeAccumulation);
-                            }
-                            
-                            updateDisplay();
-                            updateMenuDisplay();
-                            
-                            const timestamp = saveData.timestamp ? 
-                                new Date(saveData.timestamp).toLocaleString() : 'Unknown';
-                            updateStatus(`✅ Parameters loaded! (Saved: ${timestamp})`, 'success');
-                            
-                        } catch (error) {
-                            updateStatus(`❌ Load failed: ${error.message}`, 'error');
-                        }
-                    };
-                    
-                    reader.readAsText(file);
-                };
-                
-                input.click();
-                
-            } catch (error) {
-                updateStatus(`❌ Load failed: ${error.message}`, 'error');
-            }
-        }
-
-        async function toggleAudio() {
-            if (!audioContext) {
-                await initAudioContext();
-            }
-            
-            if (!audioElement) {
-                // Prompt user to upload audio file
-                uploadAudioFile();
-            } else {
-                // Toggle audio playback and reactivity
-                if (audioPlaying) {
-                    audioElement.pause();
-                    audioPlaying = false;
-                    audioReactive = false;
-                    restoreBaseParameters();
-                    updateStatus('🎵 Audio paused', 'info');
-                } else {
-                    try {
-                        // Resume audio context if needed
-                        if (audioContext.state === 'suspended') {
-                            await audioContext.resume();
-                        }
-                        
-                        await audioElement.play();
-                        audioPlaying = true;
-                        audioReactive = true;
-                        storeBaseParameters();
-                        updateStatus('🎵 Audio playing with reactivity!', 'success');
-                    } catch (error) {
-                        updateStatus(`❌ Audio playback failed: ${error.message}`, 'error');
-                    }
-                }
-                updateMenuDisplay();
-            }
-        }
-
-        async function initAudioContext() {
-            try {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                
-                // Resume context if suspended (required by some browsers)
-                if (audioContext.state === 'suspended') {
-                    await audioContext.resume();
-                }
-                
-                analyser = audioContext.createAnalyser();
-                analyser.fftSize = 2048;
-                analyser.smoothingTimeConstant = 0.8;
-                audioData = new Uint8Array(analyser.frequencyBinCount);
-                
-                updateStatus('🎵 Audio system initialized', 'success');
-            } catch (error) {
-                updateStatus(`❌ Audio init failed: ${error.message}`, 'error');
-            }
-        }
-
-        function uploadAudioFile() {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = 'audio/*,.wav,.mp3,.ogg,.m4a,.aac';
-            
-            input.onchange = async function(event) {
-                const file = event.target.files[0];
-                if (!file) return;
-                
-                updateStatus(`🎵 Loading audio: ${file.name}...`, 'info');
-                
-                try {
-                    // Clean up previous audio
-                    if (audioElement) {
-                        audioElement.pause();
-                        audioElement.src = '';
-                        audioElement = null;
-                    }
-                    
-                    if (audioSource) {
-                        audioSource.disconnect();
-                        audioSource = null;
-                    }
-                    
-                    // Create new audio element
-                    audioElement = new Audio();
-                    audioElement.preload = 'auto';
-                    audioElement.loop = true;
-                    
-                    // Create object URL
-                    const audioURL = URL.createObjectURL(file);
-                    audioElement.src = audioURL;
-                    
-                    // Wait for audio to load
-                    await new Promise((resolve, reject) => {
-                        audioElement.oncanplaythrough = resolve;
-                        audioElement.onerror = () => reject(new Error('Failed to decode audio file'));
-                        audioElement.onabort = () => reject(new Error('Audio loading aborted'));
-                        
-                        // Timeout after 10 seconds
-                        setTimeout(() => reject(new Error('Audio loading timeout')), 10000);
-                    });
-                    
-                    // Resume audio context if needed
-                    if (audioContext.state === 'suspended') {
-                        await audioContext.resume();
-                    }
-                    
-                    // Connect audio to analyser
-                    audioSource = audioContext.createMediaElementSource(audioElement);
-                    audioSource.connect(analyser);
-                    audioSource.connect(audioContext.destination);
-                    
-                    updateStatus(`🎵 Audio loaded: ${file.name}`, 'success');
-                    updateMenuDisplay();
-                    
-                    // Auto-start playback with reactivity
-                    try {
-                        await audioElement.play();
-                        audioPlaying = true;
-                        audioReactive = true;
-                        storeBaseParameters();
-                        updateStatus(`🎵 Playing: ${file.name} (Reactive mode)`, 'success');
-                    } catch (playError) {
-                        updateStatus(`⚠️ Audio loaded but autoplay blocked. Press A to play.`, 'info');
-                    }
-                    
-                } catch (error) {
-                    console.error('Audio loading error:', error);
-                    updateStatus(`❌ Failed to load audio: ${error.message}`, 'error');
-                    
-                    // Clean up on error
-                    if (audioElement) {
-                        audioElement.src = '';
-                        audioElement = null;
-                    }
-                    if (audioSource) {
-                        audioSource.disconnect();
-                        audioSource = null;
-                    }
-                }
-            };
-            
-            input.click();
-        }
-
-        function storeBaseParameters() {
-            // Store current parameter values as base values for audio reactivity
-            // These remain unchanged by audio - only the modifiers change
-            baseParameterValues = {};
-            Object.keys(parameters).forEach(key => {
-                baseParameterValues[key] = parameters[key].value;
-            });
-        }
-
-        function restoreBaseParameters() {
-            // This function is no longer needed since we use modifiers
-            // But we'll keep it for backward compatibility
-            updateDisplay();
-        }
-
-        function analyzeAudio() {
-            if (!analyser || !audioData || !audioReactive || (!audioPlaying && !microphoneActive)) {
-                return { bass: 0, mid: 0, treble: 0, overall: 0 };
-            }
-            
-            analyser.getByteFrequencyData(audioData);
-            
-            // Frequency ranges (approximate for 44.1kHz sample rate)
-            const bassRange = { start: 0, end: 32 };      // ~20-250Hz
-            const midRange = { start: 32, end: 128 };     // ~250-2000Hz  
-            const trebleRange = { start: 128, end: 256 }; // ~2000-8000Hz
-            
-            function getAverageVolume(range) {
-                let sum = 0;
-                for (let i = range.start; i < range.end && i < audioData.length; i++) {
-                    sum += audioData[i];
-                }
-                return sum / (range.end - range.start) / 255.0;
-            }
-            
-            const bass = getAverageVolume(bassRange);
-            const mid = getAverageVolume(midRange);
-            const treble = getAverageVolume(trebleRange);
-            const overall = (bass + mid + treble) / 3.0;
-            
-            return { bass, mid, treble, overall };
-        }
-
-        function applyAudioReactivity() {
-            if (!audioReactive || (!audioPlaying && !microphoneActive)) {
-                // Reset all modifiers to 1.0 when not reactive
-                Object.keys(audioModifiers).forEach(key => {
-                    audioModifiers[key] = 1.0;
-                });
-                return;
-            }
-            
-            const audioLevels = analyzeAudio();
-            
-            // Create dynamic multipliers based on audio
-            const bassMultiplier = 1.0 + (audioLevels.bass * 0.8);      // 1.0 to 1.8x
-            const midMultiplier = 1.0 + (audioLevels.mid * 0.4);        // 1.0 to 1.4x
-            const trebleMultiplier = 1.0 + (audioLevels.treble * 0.3);  // 1.0 to 1.3x
-            const overallMultiplier = 1.0 + (audioLevels.overall * 0.5); // 1.0 to 1.5x
-            
-            // Bass effects - make the center circle really pulse!
-            audioModifiers.center_fill_radius = bassMultiplier * 1.5; // Extra bass sensitivity for center
-            audioModifiers.truchet_radius = bassMultiplier;
-            audioModifiers.zoom_level = 1.0 + (audioLevels.bass * 0.3); // Slight zoom pulse
-            
-            // Mid frequencies affect rotation and movement
-            audioModifiers.rotation_speed = midMultiplier;
-            audioModifiers.plane_rotation_speed = midMultiplier;
-            audioModifiers.fly_speed = 1.0 + (audioLevels.mid * 0.6);
-            
-            // Treble affects visual complexity and color
-            audioModifiers.kaleidoscope_segments = trebleMultiplier;
-            audioModifiers.color_intensity = trebleMultiplier;
-            audioModifiers.color_speed = trebleMultiplier;
-            
-            // Overall volume affects contrast and layer count
-            audioModifiers.contrast = overallMultiplier;
-            audioModifiers.layer_count = 1.0 + (audioLevels.overall * 0.3);
-            
-            // Path effects for more dynamic movement
-            audioModifiers.path_scale = 1.0 + (audioLevels.overall * 0.4);
-        }
-
-        async function toggleMicrophone() {
-            if (!audioContext) {
-                await initAudioContext();
-            }
-            
-            if (microphoneActive) {
-                // Stop microphone
-                stopMicrophone();
-            } else {
-                // Start microphone
-                await startMicrophone();
-            }
-        }
-
-        async function startMicrophone() {
-            try {
-                updateStatus('🎤 Requesting microphone access...', 'info');
-                
-                // Request microphone access
-                microphoneStream = await navigator.mediaDevices.getUserMedia({ 
-                    audio: {
-                        echoCancellation: false,
-                        noiseSuppression: false,
-                        autoGainControl: false
-                    } 
-                });
-                
-                // Resume audio context if needed
-                if (audioContext.state === 'suspended') {
-                    await audioContext.resume();
-                }
-                
-                // Stop any playing audio file
-                if (audioElement && audioPlaying) {
-                    audioElement.pause();
-                    audioPlaying = false;
-                }
-                
-                // Connect microphone to analyzer
-                microphoneSource = audioContext.createMediaStreamSource(microphoneStream);
-                microphoneSource.connect(analyser);
-                
-                microphoneActive = true;
-                audioReactive = true;
-                storeBaseParameters();
-                
-                updateStatus('🎤 Microphone active with reactivity!', 'success');
-                updateMenuDisplay();
-                
-            } catch (error) {
-                console.error('Microphone access error:', error);
-                let errorMessage = 'Failed to access microphone';
-                
-                if (error.name === 'NotAllowedError') {
-                    errorMessage = 'Microphone access denied. Please allow microphone access and try again.';
-                } else if (error.name === 'NotFoundError') {
-                    errorMessage = 'No microphone found. Please connect a microphone and try again.';
-                } else if (error.name === 'NotReadableError') {
-                    errorMessage = 'Microphone is busy or not available.';
-                }
-                
-                updateStatus(`❌ ${errorMessage}`, 'error');
-                microphoneActive = false;
-            }
-        }
-
-        function stopMicrophone() {
-            try {
-                // Stop microphone stream
-                if (microphoneStream) {
-                    microphoneStream.getTracks().forEach(track => track.stop());
-                    microphoneStream = null;
-                }
-                
-                // Disconnect microphone source
-                if (microphoneSource) {
-                    microphoneSource.disconnect();
-                    microphoneSource = null;
-                }
-                
-                microphoneActive = false;
-                audioReactive = false;
-                restoreBaseParameters();
-                
-                updateStatus('🎤 Microphone stopped', 'info');
-                updateMenuDisplay();
-                
-            } catch (error) {
-                console.error('Error stopping microphone:', error);
-                updateStatus('❌ Error stopping microphone', 'error');
-            }
-        }
-
-        // State persistence functions
-        function scheduleAutoSave() {
-            // Clear existing timeout
-            if (autoSaveTimeout) {
-                clearTimeout(autoSaveTimeout);
-            }
-            
-            // Schedule auto-save after delay
-            autoSaveTimeout = setTimeout(() => {
-                saveStateToStorage();
-            }, AUTO_SAVE_DELAY);
-        }
-        
-        function saveStateToStorage() {
-            try {
-                const state = {
-                    parameters: {},
-                    currentParameterIndex: currentParameterIndex,
-                    currentPaletteIndex: currentPaletteIndex,
-                    useColorPalette: useColorPalette,
-                    invertColors: invertColors,
-                    palettes: JSON.parse(JSON.stringify(colorPalettes)),
-                    timeAccumulation: { ...timeAccumulation },
-                    version: "1.0",
-                    timestamp: Date.now()
-                };
-                
-                // Save parameter values
-                Object.keys(parameters).forEach(key => {
-                    state.parameters[key] = parameters[key].value;
-                });
-                
-                localStorage.setItem('kaldao23_state', JSON.stringify(state));
-                
-                if (isMobile) {
-                    console.log('📱 State auto-saved to localStorage');
-                }
-            } catch (error) {
-                console.error('Failed to save state to localStorage:', error);
-            }
-        }
-        
-        function loadStateFromStorage() {
-            try {
-                const savedState = localStorage.getItem('kaldao23_state');
-                if (!savedState) {
-                    stateLoaded = true;
-                    return;
-                }
-                
-                const state = JSON.parse(savedState);
-                
-                // Validate state version
-                if (!state.version || state.version !== "1.0") {
-                    console.log('State version mismatch, using defaults');
-                    stateLoaded = true;
-                    return;
-                }
-                
-                // Load parameters
-                if (state.parameters) {
-                    Object.keys(parameters).forEach(key => {
-                        if (state.parameters[key] !== undefined) {
-                            parameters[key].value = state.parameters[key];
-                        }
-                    });
-                }
-                
-                // Load UI state
-                if (state.currentParameterIndex !== undefined) {
-                    currentParameterIndex = Math.max(0, Math.min(parameterKeys.length - 1, state.currentParameterIndex));
-                }
-                if (state.currentPaletteIndex !== undefined) {
-                    currentPaletteIndex = Math.max(0, Math.min(colorPalettes.length - 1, state.currentPaletteIndex));
-                }
-                if (state.useColorPalette !== undefined) {
-                    useColorPalette = state.useColorPalette;
-                }
-                if (state.invertColors !== undefined) {
-                    invertColors = state.invertColors;
-                }
-                
-                // Load custom palettes
-                if (state.palettes && Array.isArray(state.palettes)) {
-                    state.palettes.forEach((palette, index) => {
-                        if (colorPalettes[index] && palette.a && palette.b && palette.c && palette.d) {
-                            colorPalettes[index] = { ...palette };
-                        }
-                    });
-                }
-                
-                // Load time accumulation
-                if (state.timeAccumulation) {
-                    Object.assign(timeAccumulation, state.timeAccumulation);
-                }
-                
-                stateLoaded = true;
-                
-                if (isMobile) {
-                    const ageMinutes = Math.floor((Date.now() - (state.timestamp || 0)) / 60000);
-                    console.log(`📱 State loaded from localStorage (${ageMinutes}m old)`);
-                }
-                
-            } catch (error) {
-                console.error('Failed to load state from localStorage:', error);
-                stateLoaded = true;
-            }
-        }
-        
-        // Clear saved state (for debugging)
-        function clearSavedState() {
-            try {
-                localStorage.removeItem('kaldao23_state');
-                console.log('📱 Saved state cleared');
-            } catch (error) {
-                console.error('Failed to clear saved state:', error);
-            }
-        }
+        function saveStateForUndo() {}
+        function scheduleAutoSave() {}
+        function loadStateFromStorage() {}
+        function toggleAudio() {}
+        function toggleMicrophone() {}
+        function saveParameters() {}
+        function loadParameters() {}
+        function undo() {}
+        function redo() {}
 
         function render() {
             try {
                 const deltaTime = 1.0 / 60.0;
 
-                // Apply audio reactivity to update modifiers
-                applyAudioReactivity();
-
                 if (!animationPaused) {
-                    timeAccumulation.camera_position += parameters.fly_speed.value * audioModifiers.fly_speed * deltaTime;
-                    timeAccumulation.rotation_time += parameters.rotation_speed.value * audioModifiers.rotation_speed * deltaTime;
-                    timeAccumulation.plane_rotation_time += parameters.plane_rotation_speed.value * audioModifiers.plane_rotation_speed * deltaTime;
-                    timeAccumulation.color_time += parameters.color_speed.value * audioModifiers.color_speed * deltaTime;
+                    timeAccumulation.camera_position += parameters.fly_speed.value * deltaTime;
+                    timeAccumulation.rotation_time += parameters.rotation_speed.value * deltaTime;
+                    timeAccumulation.plane_rotation_time += parameters.plane_rotation_speed.value * deltaTime;
+                    timeAccumulation.color_time += parameters.color_speed.value * deltaTime;
                 }
 
                 gl.viewport(0, 0, canvas.width, canvas.height);
                 gl.useProgram(program);
                 
-                // Set all uniforms using base parameters multiplied by audio modifiers
                 gl.uniform2f(uniforms.u_resolution, canvas.width, canvas.height);
                 gl.uniform1f(uniforms.u_time, performance.now() * 0.001);
                 gl.uniform1f(uniforms.u_camera_position, timeAccumulation.camera_position);
@@ -2023,23 +840,22 @@
                 gl.uniform1f(uniforms.u_plane_rotation_time, timeAccumulation.plane_rotation_time);
                 gl.uniform1f(uniforms.u_color_time, timeAccumulation.color_time);
                 
-                // Apply audio modifiers to parameters
-                gl.uniform1f(uniforms.u_fly_speed, parameters.fly_speed.value * audioModifiers.fly_speed);
-                gl.uniform1f(uniforms.u_contrast, parameters.contrast.value * audioModifiers.contrast);
-                gl.uniform1f(uniforms.u_kaleidoscope_segments, parameters.kaleidoscope_segments.value * audioModifiers.kaleidoscope_segments);
-                gl.uniform1f(uniforms.u_layer_count, Math.max(1, Math.min(10, parameters.layer_count.value * audioModifiers.layer_count)));
-                gl.uniform1f(uniforms.u_truchet_radius, parameters.truchet_radius.value * audioModifiers.truchet_radius);
-                gl.uniform1f(uniforms.u_center_fill_radius, parameters.center_fill_radius.value * audioModifiers.center_fill_radius);
-                gl.uniform1f(uniforms.u_rotation_speed, parameters.rotation_speed.value * audioModifiers.rotation_speed);
-                gl.uniform1f(uniforms.u_plane_rotation_speed, parameters.plane_rotation_speed.value * audioModifiers.plane_rotation_speed);
-                gl.uniform1f(uniforms.u_zoom_level, parameters.zoom_level.value * audioModifiers.zoom_level);
-                gl.uniform1f(uniforms.u_color_intensity, parameters.color_intensity.value * audioModifiers.color_intensity);
-                gl.uniform1f(uniforms.u_camera_tilt_x, parameters.camera_tilt_x.value * audioModifiers.camera_tilt_x);
-                gl.uniform1f(uniforms.u_camera_tilt_y, parameters.camera_tilt_y.value * audioModifiers.camera_tilt_y);
-                gl.uniform1f(uniforms.u_camera_roll, parameters.camera_roll.value * audioModifiers.camera_roll);
-                gl.uniform1f(uniforms.u_path_stability, parameters.path_stability.value * audioModifiers.path_stability);
-                gl.uniform1f(uniforms.u_path_scale, parameters.path_scale.value * audioModifiers.path_scale);
-                gl.uniform1f(uniforms.u_color_speed, parameters.color_speed.value * audioModifiers.color_speed);
+                gl.uniform1f(uniforms.u_fly_speed, parameters.fly_speed.value);
+                gl.uniform1f(uniforms.u_contrast, parameters.contrast.value);
+                gl.uniform1f(uniforms.u_kaleidoscope_segments, parameters.kaleidoscope_segments.value);
+                gl.uniform1f(uniforms.u_layer_count, parameters.layer_count.value);
+                gl.uniform1f(uniforms.u_truchet_radius, parameters.truchet_radius.value);
+                gl.uniform1f(uniforms.u_center_fill_radius, parameters.center_fill_radius.value);
+                gl.uniform1f(uniforms.u_rotation_speed, parameters.rotation_speed.value);
+                gl.uniform1f(uniforms.u_plane_rotation_speed, parameters.plane_rotation_speed.value);
+                gl.uniform1f(uniforms.u_zoom_level, parameters.zoom_level.value);
+                gl.uniform1f(uniforms.u_color_intensity, parameters.color_intensity.value);
+                gl.uniform1f(uniforms.u_camera_tilt_x, parameters.camera_tilt_x.value);
+                gl.uniform1f(uniforms.u_camera_tilt_y, parameters.camera_tilt_y.value);
+                gl.uniform1f(uniforms.u_camera_roll, parameters.camera_roll.value);
+                gl.uniform1f(uniforms.u_path_stability, parameters.path_stability.value);
+                gl.uniform1f(uniforms.u_path_scale, parameters.path_scale.value);
+                gl.uniform1f(uniforms.u_color_speed, parameters.color_speed.value);
                 gl.uniform1f(uniforms.u_use_color_palette, useColorPalette ? 1.0 : 0.0);
                 gl.uniform1f(uniforms.u_invert_colors, invertColors ? 1.0 : 0.0);
                 
@@ -2057,29 +873,7 @@
             }
         }
 
-        // Initialize when page loads
         window.addEventListener('load', init);
-        
-        // Save state before page unload (mobile browsers)
-        window.addEventListener('beforeunload', () => {
-            if (stateLoaded) {
-                saveStateToStorage();
-            }
-        });
-        
-        // Save state when page becomes hidden (mobile browsers)
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden && stateLoaded) {
-                saveStateToStorage();
-            }
-        });
-        
-        // Save state on page focus loss (mobile browsers)
-        window.addEventListener('blur', () => {
-            if (stateLoaded) {
-                saveStateToStorage();
-            }
-        });
     </script>
 </body>
 </html>
