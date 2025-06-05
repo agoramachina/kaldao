@@ -104,6 +104,20 @@
         let controlsFadeTimeout = null;
         const CONTROLS_FADE_DELAY = 3000; // 3 seconds
         
+        // Mobile detection and touch handling
+        let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        let touchStartTime = 0;
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let isLongPress = false;
+        let isDragging = false;
+        let lastTouchTime = 0;
+        
+        // Shake detection
+        let lastAcceleration = { x: 0, y: 0, z: 0 };
+        let shakeThreshold = 25; // Increased from 15 to make it less sensitive
+        let shakeTimeout = null;
+        
         // Audio system
         let audioContext = null;
         let audioSource = null;
@@ -682,7 +696,10 @@
         }
 
         function setupControls() {
+            // Desktop keyboard controls
             document.addEventListener('keydown', (e) => {
+                if (isMobile) return; // Skip keyboard on mobile
+                
                 try {
                     // Reset controls fade timer on any keypress
                     resetControlsFadeTimer();
@@ -773,6 +790,25 @@
                 }
             });
 
+            // Mobile touch controls
+            if (isMobile) {
+                setupMobileControls();
+                
+                // Hide desktop controls on mobile
+                const controls = document.getElementById('controls');
+                if (controls) {
+                    controls.style.display = 'none';
+                }
+                
+                // Make UI more mobile friendly
+                const ui = document.getElementById('ui');
+                if (ui) {
+                    ui.style.fontSize = '16px';
+                    ui.style.padding = '20px';
+                    ui.style.maxWidth = '90vw';
+                }
+            }
+
             window.addEventListener('resize', () => {
                 if (canvas && gl) {
                     canvas.width = window.innerWidth;
@@ -780,6 +816,199 @@
                     gl.viewport(0, 0, canvas.width, canvas.height);
                 }
             });
+        }
+
+        function setupMobileControls() {
+            // Touch event listeners
+            canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+            canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+            canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+            
+            // Device motion for shake detection
+            if (window.DeviceMotionEvent) {
+                window.addEventListener('devicemotion', handleDeviceMotion);
+            }
+        }
+
+        function handleTouchStart(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            touchStartTime = Date.now();
+            touchStartX = touch.clientX;
+            touchStartY = touch.clientY;
+            isLongPress = false;
+            isDragging = false;
+            
+            // Start long press timer
+            setTimeout(() => {
+                if (!isDragging && Date.now() - touchStartTime >= 800) {
+                    isLongPress = true;
+                    // Vibrate if available
+                    if (navigator.vibrate) navigator.vibrate(100);
+                    resetAllParameters(); // Changed to reset ALL parameters
+                    updateStatus('📱 All parameters reset!', 'success');
+                    // Auto-hide status after 2 seconds
+                    setTimeout(() => {
+                        if (!menuVisible) {
+                            const ui = document.getElementById('ui');
+                            if (ui) ui.classList.add('hidden');
+                        }
+                    }, 2000);
+                }
+            }, 800);
+        }
+
+        function handleTouchMove(e) {
+            e.preventDefault();
+            if (isLongPress) return;
+            
+            const touch = e.touches[0];
+            const deltaX = touch.clientX - touchStartX;
+            const deltaY = touch.clientY - touchStartY;
+            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            
+            if (distance > 15) { // Increased threshold for less sensitivity
+                isDragging = true;
+                
+                // Vertical swipe: adjust parameter value (like a fader)
+                if (Math.abs(deltaY) > Math.abs(deltaX)) {
+                    const sensitivity = 0.003; // Reduced from 0.01 to make it less sensitive
+                    const delta = -deltaY * sensitivity; // Invert Y (up = increase)
+                    adjustParameterSmooth(delta);
+                    
+                    // Update start position for continuous dragging
+                    touchStartY = touch.clientY;
+                }
+                // Horizontal swipe: change parameter
+                else {
+                    const swipeSpeed = Math.abs(deltaX) / (Date.now() - touchStartTime);
+                    
+                    // Quick swipe: discrete parameter change
+                    if (swipeSpeed > 0.5 && Math.abs(deltaX) > 60) {
+                        const direction = deltaX > 0 ? 1 : -1;
+                        switchParameter(direction);
+                        updateStatus(`📱 ${parameters[parameterKeys[currentParameterIndex]].name}`, 'info');
+                        
+                        // Auto-hide status after 1.5 seconds
+                        setTimeout(() => {
+                            if (!menuVisible) {
+                                const ui = document.getElementById('ui');
+                                if (ui) ui.classList.add('hidden');
+                            }
+                        }, 1500);
+                        
+                        // Reset touch start to prevent multiple switches
+                        touchStartX = touch.clientX;
+                        touchStartY = touch.clientY;
+                        touchStartTime = Date.now();
+                    }
+                    // Slow drag: continuous cycling through parameters
+                    else if (Math.abs(deltaX) > 40) {
+                        const parameterSpacing = 80; // pixels per parameter
+                        const parameterIndex = Math.floor(Math.abs(deltaX) / parameterSpacing);
+                        const direction = deltaX > 0 ? 1 : -1;
+                        const targetIndex = (currentParameterIndex + (direction * parameterIndex) + parameterKeys.length) % parameterKeys.length;
+                        
+                        if (targetIndex !== currentParameterIndex) {
+                            currentParameterIndex = targetIndex;
+                            updateDisplay();
+                            updateStatus(`📱 ${parameters[parameterKeys[currentParameterIndex]].name}`, 'info');
+                            
+                            // Auto-hide status after 1.5 seconds
+                            setTimeout(() => {
+                                if (!menuVisible) {
+                                    const ui = document.getElementById('ui');
+                                    if (ui) ui.classList.add('hidden');
+                                }
+                            }, 1500);
+                        }
+                    }
+                }
+            }
+        }
+
+        function handleTouchEnd(e) {
+            e.preventDefault();
+            const touchDuration = Date.now() - touchStartTime;
+            
+            // Simple tap (not long press, not drag)
+            if (!isLongPress && !isDragging && touchDuration < 300) {
+                // Double tap detection
+                const now = Date.now();
+                if (now - lastTouchTime < 300) {
+                    // Double tap - randomize colors
+                    randomizeColors();
+                    updateStatus('📱 Colors randomized!', 'success');
+                    
+                    // Auto-hide status after 2 seconds
+                    setTimeout(() => {
+                        if (!menuVisible) {
+                            const ui = document.getElementById('ui');
+                            if (ui) ui.classList.add('hidden');
+                        }
+                    }, 2000);
+                } else {
+                    // Single tap - toggle menu
+                    toggleMenu();
+                }
+                lastTouchTime = now;
+            }
+            
+            // Reset touch state
+            isLongPress = false;
+            isDragging = false;
+        }
+
+        function handleDeviceMotion(e) {
+            const acceleration = e.accelerationIncludingGravity;
+            if (!acceleration) return;
+            
+            const deltaX = Math.abs(acceleration.x - lastAcceleration.x);
+            const deltaY = Math.abs(acceleration.y - lastAcceleration.y);
+            const deltaZ = Math.abs(acceleration.z - lastAcceleration.z);
+            
+            const totalDelta = deltaX + deltaY + deltaZ;
+            
+            if (totalDelta > shakeThreshold) {
+                // Prevent multiple shake detections
+                if (!shakeTimeout) {
+                    randomizeParameters();
+                    updateStatus('📱 Shake detected! Parameters randomized!', 'success');
+                    if (navigator.vibrate) navigator.vibrate([50, 100, 50]);
+                    
+                    // Auto-hide status after 3 seconds
+                    setTimeout(() => {
+                        if (!menuVisible) {
+                            const ui = document.getElementById('ui');
+                            if (ui) ui.classList.add('hidden');
+                        }
+                    }, 3000);
+                    
+                    shakeTimeout = setTimeout(() => {
+                        shakeTimeout = null;
+                    }, 1000);
+                }
+            }
+            
+            lastAcceleration = { x: acceleration.x, y: acceleration.y, z: acceleration.z };
+        }
+
+        function adjustParameterSmooth(delta) {
+            // Save current state before making changes
+            saveStateForUndo();
+            
+            const paramKey = parameterKeys[currentParameterIndex];
+            const param = parameters[paramKey];
+            
+            // Use smaller steps for smooth mobile control
+            const step = param.step * 0.5;
+            param.value = Math.max(param.min, Math.min(param.max, param.value + delta * (param.max - param.min)));
+            
+            if (paramKey === 'kaleidoscope_segments') {
+                param.value = Math.round(param.value / 2) * 2;
+            }
+            
+            updateDisplay();
         }
 
         function updateStatus(message, type = 'info') {
@@ -1098,6 +1327,20 @@
             if (allParamsList) {
                 let paramsHTML = '';
                 
+                // Add mobile instructions if on mobile
+                if (isMobile) {
+                    paramsHTML += '<div style="color: #4CAF50; font-weight: bold; margin-bottom: 10px; font-size: 14px;">📱 MOBILE CONTROLS</div>';
+                    paramsHTML += '<div style="color: #FFC107; font-size: 12px; margin-bottom: 15px; line-height: 1.4;">';
+                    paramsHTML += '• Tap: Toggle menu<br>';
+                    paramsHTML += '• Double tap: Random colors<br>';
+                    paramsHTML += '• Hold: Reset ALL parameters<br>';
+                    paramsHTML += '• Quick swipe ←/→: Change parameter<br>';
+                    paramsHTML += '• Drag ←/→: Scroll through parameters<br>';
+                    paramsHTML += '• Swipe ↑/↓: Adjust value<br>';
+                    paramsHTML += '• Shake: Random all<br>';
+                    paramsHTML += '</div>';
+                }
+                
                 // Movement & Animation
                 paramsHTML += '<div style="color: #4CAF50; font-weight: bold; margin-bottom: 5px;">MOVEMENT & ANIMATION</div>';
                 const movementParams = ['fly_speed', 'rotation_speed', 'plane_rotation_speed', 'zoom_level'];
@@ -1106,7 +1349,8 @@
                     const index = parameterKeys.indexOf(key);
                     const isCurrent = index === currentParameterIndex;
                     const style = isCurrent ? 'color: #4CAF50; font-weight: bold;' : 'color: #ffffff;';
-                    paramsHTML += `<div style="${style}">${param.name}: ${param.value.toFixed(3)}</div>`;
+                    const indicator = isCurrent && isMobile ? '👆 ' : '';
+                    paramsHTML += `<div style="${style}">${indicator}${param.name}: ${param.value.toFixed(3)}</div>`;
                 });
                 
                 paramsHTML += '<br>';
@@ -1119,9 +1363,10 @@
                     const index = parameterKeys.indexOf(key);
                     const isCurrent = index === currentParameterIndex;
                     const style = isCurrent ? 'color: #4CAF50; font-weight: bold;' : 'color: #ffffff;';
+                    const indicator = isCurrent && isMobile ? '👆 ' : '';
                     const value = key === 'kaleidoscope_segments' || key === 'layer_count' ? 
                         param.value.toFixed(0) : param.value.toFixed(3);
-                    paramsHTML += `<div style="${style}">${param.name}: ${value}</div>`;
+                    paramsHTML += `<div style="${style}">${indicator}${param.name}: ${value}</div>`;
                 });
                 
                 paramsHTML += '<br>';
@@ -1134,7 +1379,8 @@
                     const index = parameterKeys.indexOf(key);
                     const isCurrent = index === currentParameterIndex;
                     const style = isCurrent ? 'color: #4CAF50; font-weight: bold;' : 'color: #ffffff;';
-                    paramsHTML += `<div style="${style}">${param.name}: ${param.value.toFixed(3)}</div>`;
+                    const indicator = isCurrent && isMobile ? '👆 ' : '';
+                    paramsHTML += `<div style="${style}">${indicator}${param.name}: ${param.value.toFixed(3)}</div>`;
                 });
                 
                 paramsHTML += '<br>';
@@ -1147,37 +1393,46 @@
                     const index = parameterKeys.indexOf(key);
                     const isCurrent = index === currentParameterIndex;
                     const style = isCurrent ? 'color: #4CAF50; font-weight: bold;' : 'color: #ffffff;';
-                    paramsHTML += `<div style="${style}">${param.name}: ${param.value.toFixed(3)}</div>`;
+                    const indicator = isCurrent && isMobile ? '👆 ' : '';
+                    paramsHTML += `<div style="${style}">${indicator}${param.name}: ${param.value.toFixed(3)}</div>`;
                 });
                 
                 allParamsList.innerHTML = paramsHTML;
             }
             
-            // Update palettes list
-            const allPalettesList = document.getElementById('allPalettesList');
-            if (allPalettesList) {
-                let palettesHTML = '';
-                colorPalettes.forEach((palette, index) => {
-                    const isCurrent = index === currentPaletteIndex;
-                    const style = isCurrent ? 'color: #4CAF50; font-weight: bold;' : 'color: #ffffff;';
-                    const inverted = isCurrent && invertColors ? ' (Inverted)' : '';
-                    const active = isCurrent && useColorPalette ? ' ●' : (isCurrent ? ' ○' : '');
-                    palettesHTML += `<div style="${style}">${palette.name}${inverted}${active}</div>`;
-                });
-                allPalettesList.innerHTML = palettesHTML;
+            // Only show right column on desktop
+            const rightColumn = document.querySelector('.menu > div > div:nth-child(2)');
+            if (rightColumn) {
+                rightColumn.style.display = isMobile ? 'none' : 'block';
             }
             
-            // Update audio status
-            const allAudioStatus = document.getElementById('allAudioStatus');
-            if (allAudioStatus) {
-                if (microphoneActive) {
-                    allAudioStatus.innerHTML = '🎤 <span style="color: #4CAF50;">Microphone Active</span><br>🔊 Audio Reactive: ON<br><em>Press M to stop</em>';
-                } else if (!audioElement) {
-                    allAudioStatus.innerHTML = '🎵 No audio file loaded<br>🎤 Microphone: OFF<br>🔊 Audio Reactive: OFF<br><em>Press A for file, M for mic</em>';
-                } else {
-                    const playStatus = audioPlaying ? '<span style="color: #4CAF50;">Playing</span>' : '<span style="color: #FF9800;">Paused</span>';
-                    const reactiveStatus = audioReactive ? '<span style="color: #4CAF50;">ON</span>' : '<span style="color: #FF9800;">OFF</span>';
-                    allAudioStatus.innerHTML = `🎵 File: ${playStatus}<br>🎤 Microphone: OFF<br>🔊 Audio Reactive: ${reactiveStatus}<br><em>Press A to toggle, M for mic</em>`;
+            if (!isMobile) {
+                // Update palettes list (desktop only)
+                const allPalettesList = document.getElementById('allPalettesList');
+                if (allPalettesList) {
+                    let palettesHTML = '';
+                    colorPalettes.forEach((palette, index) => {
+                        const isCurrent = index === currentPaletteIndex;
+                        const style = isCurrent ? 'color: #4CAF50; font-weight: bold;' : 'color: #ffffff;';
+                        const inverted = isCurrent && invertColors ? ' (Inverted)' : '';
+                        const active = isCurrent && useColorPalette ? ' ●' : (isCurrent ? ' ○' : '');
+                        palettesHTML += `<div style="${style}">${palette.name}${inverted}${active}</div>`;
+                    });
+                    allPalettesList.innerHTML = palettesHTML;
+                }
+                
+                // Update audio status (desktop only)
+                const allAudioStatus = document.getElementById('allAudioStatus');
+                if (allAudioStatus) {
+                    if (microphoneActive) {
+                        allAudioStatus.innerHTML = '🎤 <span style="color: #4CAF50;">Microphone Active</span><br>🔊 Audio Reactive: ON<br><em>Press M to stop</em>';
+                    } else if (!audioElement) {
+                        allAudioStatus.innerHTML = '🎵 No audio file loaded<br>🎤 Microphone: OFF<br>🔊 Audio Reactive: OFF<br><em>Press A for file, M for mic</em>';
+                    } else {
+                        const playStatus = audioPlaying ? '<span style="color: #4CAF50;">Playing</span>' : '<span style="color: #FF9800;">Paused</span>';
+                        const reactiveStatus = audioReactive ? '<span style="color: #4CAF50;">ON</span>' : '<span style="color: #FF9800;">OFF</span>';
+                        allAudioStatus.innerHTML = `🎵 File: ${playStatus}<br>🎤 Microphone: OFF<br>🔊 Audio Reactive: ${reactiveStatus}<br><em>Press A to toggle, M for mic</em>`;
+                    }
                 }
             }
         }
