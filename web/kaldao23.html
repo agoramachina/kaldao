@@ -99,6 +99,11 @@
         let invertColors = false;
         let menuVisible = false;
         
+        // State persistence
+        let stateLoaded = false;
+        let autoSaveTimeout = null;
+        const AUTO_SAVE_DELAY = 2000; // Auto-save after 2 seconds of inactivity
+        
         // Controls menu auto-fade system
         let controlsVisible = true;
         let controlsFadeTimeout = null;
@@ -583,6 +588,10 @@
                 setupShaders();
                 setupGeometry();
                 setupUniforms();
+                
+                // Load saved state before setting up controls
+                loadStateFromStorage();
+                
                 setupControls();
                 
                 updateStatus('✅ Kaldao loaded successfully!', 'success');
@@ -1047,6 +1056,7 @@
             }
             
             updateDisplay();
+            scheduleAutoSave();
         }
 
         function switchParameter(delta) {
@@ -1141,6 +1151,7 @@
             });
             
             updateDisplay();
+            scheduleAutoSave();
         }
 
         function resetCurrentParameter() {
@@ -1868,6 +1879,125 @@
             }
         }
 
+        // State persistence functions
+        function scheduleAutoSave() {
+            // Clear existing timeout
+            if (autoSaveTimeout) {
+                clearTimeout(autoSaveTimeout);
+            }
+            
+            // Schedule auto-save after delay
+            autoSaveTimeout = setTimeout(() => {
+                saveStateToStorage();
+            }, AUTO_SAVE_DELAY);
+        }
+        
+        function saveStateToStorage() {
+            try {
+                const state = {
+                    parameters: {},
+                    currentParameterIndex: currentParameterIndex,
+                    currentPaletteIndex: currentPaletteIndex,
+                    useColorPalette: useColorPalette,
+                    invertColors: invertColors,
+                    palettes: JSON.parse(JSON.stringify(colorPalettes)),
+                    timeAccumulation: { ...timeAccumulation },
+                    version: "1.0",
+                    timestamp: Date.now()
+                };
+                
+                // Save parameter values
+                Object.keys(parameters).forEach(key => {
+                    state.parameters[key] = parameters[key].value;
+                });
+                
+                localStorage.setItem('kaldao23_state', JSON.stringify(state));
+                
+                if (isMobile) {
+                    console.log('📱 State auto-saved to localStorage');
+                }
+            } catch (error) {
+                console.error('Failed to save state to localStorage:', error);
+            }
+        }
+        
+        function loadStateFromStorage() {
+            try {
+                const savedState = localStorage.getItem('kaldao23_state');
+                if (!savedState) {
+                    stateLoaded = true;
+                    return;
+                }
+                
+                const state = JSON.parse(savedState);
+                
+                // Validate state version
+                if (!state.version || state.version !== "1.0") {
+                    console.log('State version mismatch, using defaults');
+                    stateLoaded = true;
+                    return;
+                }
+                
+                // Load parameters
+                if (state.parameters) {
+                    Object.keys(parameters).forEach(key => {
+                        if (state.parameters[key] !== undefined) {
+                            parameters[key].value = state.parameters[key];
+                        }
+                    });
+                }
+                
+                // Load UI state
+                if (state.currentParameterIndex !== undefined) {
+                    currentParameterIndex = Math.max(0, Math.min(parameterKeys.length - 1, state.currentParameterIndex));
+                }
+                if (state.currentPaletteIndex !== undefined) {
+                    currentPaletteIndex = Math.max(0, Math.min(colorPalettes.length - 1, state.currentPaletteIndex));
+                }
+                if (state.useColorPalette !== undefined) {
+                    useColorPalette = state.useColorPalette;
+                }
+                if (state.invertColors !== undefined) {
+                    invertColors = state.invertColors;
+                }
+                
+                // Load custom palettes
+                if (state.palettes && Array.isArray(state.palettes)) {
+                    state.palettes.forEach((palette, index) => {
+                        if (colorPalettes[index] && palette.a && palette.b && palette.c && palette.d) {
+                            colorPalettes[index] = { ...palette };
+                        }
+                    });
+                }
+                
+                // Load time accumulation
+                if (state.timeAccumulation) {
+                    Object.assign(timeAccumulation, state.timeAccumulation);
+                }
+                
+                stateLoaded = true;
+                
+                if (isMobile) {
+                    const ageMinutes = Math.floor((Date.now() - (state.timestamp || 0)) / 60000);
+                    console.log(`📱 State loaded from localStorage (${ageMinutes}m old)`);
+                }
+                
+            } catch (error) {
+                console.error('Failed to load state from localStorage:', error);
+                stateLoaded = true;
+            }
+        }
+        
+        // Clear saved state (for debugging)
+        function clearSavedState() {
+            try {
+                localStorage.removeItem('kaldao23_state');
+                console.log('📱 Saved state cleared');
+            } catch (error) {
+                console.error('Failed to clear saved state:', error);
+            }
+        }
+
         function render() {
             try {
                 const deltaTime = 1.0 / 60.0;
@@ -1929,6 +2059,27 @@
 
         // Initialize when page loads
         window.addEventListener('load', init);
+        
+        // Save state before page unload (mobile browsers)
+        window.addEventListener('beforeunload', () => {
+            if (stateLoaded) {
+                saveStateToStorage();
+            }
+        });
+        
+        // Save state when page becomes hidden (mobile browsers)
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && stateLoaded) {
+                saveStateToStorage();
+            }
+        });
+        
+        // Save state on page focus loss (mobile browsers)
+        window.addEventListener('blur', () => {
+            if (stateLoaded) {
+                saveStateToStorage();
+            }
+        });
     </script>
 </body>
 </html>
