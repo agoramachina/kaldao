@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-Kaldao Fractal Visualizer v0.3.2
+Kaldao Fractal Visualizer v0.3.1
 Interactive WebGL fractal visualizer with real-time parameter control
 
 @agoramachina 2025
@@ -108,11 +108,12 @@ MIT License
             </div>
             
             <div style="text-align: center; margin-top: 15px; opacity: 0.7; font-size: 12px;">
-                ESC to toggle menu • Current parameter highlighted in green<br>
-                Use arrow keys to switch parameters and adjust values
+                Press ESC to close • Current parameter highlighted in green<br>
+                Menu open: ↑↓ cycle parameters • ←→ adjust values<br>
+                Menu closed: ←→ cycle parameters • ↑↓ adjust values
             </div>
-            <div style="display: flex; justify-content: center; align-items: center; margin-top: 10px; opacity: 0.5; font-size: 10px; color: #888; gap: 15px;">
-                <span id="desktop-version">Kaldao v${VERSION}</span>
+            <div style="text-align: center; margin-top: 10px; opacity: 0.5; font-size: 10px; color: #888;">
+                Kaldao v0.3.1
             </div>
         </div>
         
@@ -122,21 +123,17 @@ MIT License
             <div id="allParametersListMobile" style="font-family: monospace; font-size: 11px; line-height: 1.3;"></div>
             
             <div style="text-align: center; margin-top: 15px; opacity: 0.7; font-size: 10px;">
-                Swipe ←→ to change parameters<br>
-                Scoll ↕ to adjust values<br>
-                Pinch to zoom<br>
-                Shake to randomize<br>
-                Tap and hold to reset <br>
+                Tap to close • Swipe ←→ for parameters • Swipe ↕ to adjust • Hold 2s to reset all<br>
+                Tilt device for camera • Pinch to zoom • Two-finger tap for colors • Shake to randomize
             </div>
             <div style="text-align: center; margin-top: 8px; opacity: 0.5; font-size: 9px; color: #888;">
-                <span id="mobile-version">Kaldao v${VERSION}</span>
+                Kaldao v0.2.5
             </div>
         </div>
     </div>
 
     <script>
         // Global variables
-        const VERSION = "0.3.2";
         let gl, canvas, program;
         let animationPaused = false;
         let currentParameterIndex = 0;
@@ -648,16 +645,6 @@ MIT License
                 setupUniforms();
                 setupControls();
                 
-                // Update version displays
-                const desktopVersion = document.getElementById('desktop-version');
-                if (desktopVersion) {
-                    desktopVersion.textContent = `Kaldao v${VERSION}`;
-                }
-                const mobileVersion = document.getElementById('mobile-version');
-                if (mobileVersion) {
-                    mobileVersion.textContent = `Kaldao v${VERSION}`;
-                }
-                
                 updateStatus('✅ Kaldao loaded successfully!', 'success');
                 updateDisplay();
                 // Start controls auto-fade timer
@@ -993,11 +980,8 @@ MIT License
         }
         
         function handleTouchStart(e) {
-            // Allow menu interaction but handle menu toggle separately
-            if (e.target.closest('.menu') && menuVisible) {
-                // If tapping inside menu while it's visible, just close it
-                e.preventDefault();
-                toggleMenu();
+            // Don't prevent default on menu elements
+            if (e.target.closest('.menu')) {
                 return;
             }
             
@@ -1088,7 +1072,7 @@ MIT License
         }
         
         function handleTouchMove(e) {
-            // Don't handle gestures on menu elements
+            // Don't prevent default on menu elements
             if (e.target.closest('.menu')) {
                 return;
             }
@@ -1215,7 +1199,7 @@ MIT License
         }
         
         function handleTouchEnd(e) {
-            // Don't handle gestures on menu elements
+            // Don't prevent default on menu elements
             if (e.target.closest('.menu')) {
                 return;
             }
@@ -1776,7 +1760,7 @@ MIT License
                         palettes: colorPalettes
                     },
                     timeAccumulation: timeAccumulation,
-                    version: VERSION,
+                    version: "1.0",
                     timestamp: new Date().toISOString(),
                     description: "Kaldao Fractal Visualizer Parameters"
                 };
