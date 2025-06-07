@@ -114,6 +114,26 @@
         let audioPlaying = false;
         let baseParameterValues = {};
         
+        // Audio modifiers - these multiply the base parameters
+        let audioModifiers = {
+            fly_speed: 1.0,
+            contrast: 1.0,
+            kaleidoscope_segments: 1.0,
+            truchet_radius: 1.0,
+            center_fill_radius: 1.0,
+            layer_count: 1.0,
+            rotation_speed: 1.0,
+            zoom_level: 1.0,
+            color_intensity: 1.0,
+            plane_rotation_speed: 1.0,
+            camera_tilt_x: 1.0,
+            camera_tilt_y: 1.0,
+            camera_roll: 1.0,
+            path_stability: 1.0,
+            path_scale: 1.0,
+            color_speed: 1.0
+        };
+        
         // Microphone system
         let microphoneStream = null;
         let microphoneSource = null;
@@ -303,9 +323,13 @@
                 vec2 hp = p;
                 vec2 hpp = toPolar(hp);
                 
-                float rn = modMirror1(hpp.y, 2.0 * PI / rep);
+                // Ensure rep is always even for proper mirroring
+                float evenRep = floor(rep * 0.5) * 2.0;
+                evenRep = max(evenRep, 4.0); // Minimum of 4 segments
                 
-                float sa = PI / rep - pabs(PI / rep - abs(hpp.y), sm);
+                float rn = modMirror1(hpp.y, 2.0 * PI / evenRep);
+                
+                float sa = PI / evenRep - pabs(PI / evenRep - abs(hpp.y), sm);
                 hpp.y = sign(hpp.y) * sa;
                 
                 hp = toRect(hpp);
@@ -1415,6 +1439,7 @@
 
         function storeBaseParameters() {
             // Store current parameter values as base values for audio reactivity
+            // These remain unchanged by audio - only the modifiers change
             baseParameterValues = {};
             Object.keys(parameters).forEach(key => {
                 baseParameterValues[key] = parameters[key].value;
@@ -1422,12 +1447,8 @@
         }
 
         function restoreBaseParameters() {
-            // Restore parameters to their base values
-            Object.keys(baseParameterValues).forEach(key => {
-                if (parameters[key]) {
-                    parameters[key].value = baseParameterValues[key];
-                }
-            });
+            // This function is no longer needed since we use modifiers
+            // But we'll keep it for backward compatibility
             updateDisplay();
         }
 
@@ -1460,61 +1481,43 @@
         }
 
         function applyAudioReactivity() {
-            if (!audioReactive || (!audioPlaying && !microphoneActive)) return;
+            if (!audioReactive || (!audioPlaying && !microphoneActive)) {
+                // Reset all modifiers to 1.0 when not reactive
+                Object.keys(audioModifiers).forEach(key => {
+                    audioModifiers[key] = 1.0;
+                });
+                return;
+            }
             
             const audioLevels = analyzeAudio();
             
-            // Apply audio modulation to parameters (relative to base values)
-            const bassInfluence = audioLevels.bass * 2.0;
-            const midInfluence = audioLevels.mid * 1.5;
-            const trebleInfluence = audioLevels.treble * 1.0;
+            // Create dynamic multipliers based on audio
+            const bassMultiplier = 1.0 + (audioLevels.bass * 0.8);      // 1.0 to 1.8x
+            const midMultiplier = 1.0 + (audioLevels.mid * 0.4);        // 1.0 to 1.4x
+            const trebleMultiplier = 1.0 + (audioLevels.treble * 0.3);  // 1.0 to 1.3x
+            const overallMultiplier = 1.0 + (audioLevels.overall * 0.5); // 1.0 to 1.5x
             
-            // Bass affects truchet radius and zoom
-            if (baseParameterValues.truchet_radius !== undefined) {
-                const baseRadius = baseParameterValues.truchet_radius;
-                parameters.truchet_radius.value = baseRadius + (bassInfluence * 0.3);
-                parameters.truchet_radius.value = Math.max(parameters.truchet_radius.min, 
-                    Math.min(parameters.truchet_radius.max, parameters.truchet_radius.value));
-            }
+            // Bass effects - make the center circle really pulse!
+            audioModifiers.center_fill_radius = bassMultiplier * 1.5; // Extra bass sensitivity for center
+            audioModifiers.truchet_radius = bassMultiplier;
+            audioModifiers.zoom_level = 1.0 + (audioLevels.bass * 0.3); // Slight zoom pulse
             
-            if (baseParameterValues.zoom_level !== undefined) {
-                const baseZoom = baseParameterValues.zoom_level;
-                parameters.zoom_level.value = baseZoom + (bassInfluence * 0.5);
-                parameters.zoom_level.value = Math.max(parameters.zoom_level.min, 
-                    Math.min(parameters.zoom_level.max, parameters.zoom_level.value));
-            }
+            // Mid frequencies affect rotation and movement
+            audioModifiers.rotation_speed = midMultiplier;
+            audioModifiers.plane_rotation_speed = midMultiplier;
+            audioModifiers.fly_speed = 1.0 + (audioLevels.mid * 0.6);
             
-            // Mid frequencies affect rotation speed
-            if (baseParameterValues.rotation_speed !== undefined) {
-                const baseRotation = baseParameterValues.rotation_speed;
-                parameters.rotation_speed.value = baseRotation + (midInfluence * 0.1);
-                parameters.rotation_speed.value = Math.max(parameters.rotation_speed.min, 
-                    Math.min(parameters.rotation_speed.max, parameters.rotation_speed.value));
-            }
+            // Treble affects visual complexity and color
+            audioModifiers.kaleidoscope_segments = trebleMultiplier;
+            audioModifiers.color_intensity = trebleMultiplier;
+            audioModifiers.color_speed = trebleMultiplier;
             
-            // Treble affects kaleidoscope segments and color intensity
-            if (baseParameterValues.kaleidoscope_segments !== undefined) {
-                const baseSegments = baseParameterValues.kaleidoscope_segments;
-                let newSegments = baseSegments + (trebleInfluence * 20.0);
-                newSegments = Math.round(newSegments / 2) * 2; // Keep even
-                parameters.kaleidoscope_segments.value = Math.max(parameters.kaleidoscope_segments.min, 
-                    Math.min(parameters.kaleidoscope_segments.max, newSegments));
-            }
+            // Overall volume affects contrast and layer count
+            audioModifiers.contrast = overallMultiplier;
+            audioModifiers.layer_count = 1.0 + (audioLevels.overall * 0.3);
             
-            if (baseParameterValues.color_intensity !== undefined) {
-                const baseIntensity = baseParameterValues.color_intensity;
-                parameters.color_intensity.value = baseIntensity + (trebleInfluence * 0.8);
-                parameters.color_intensity.value = Math.max(parameters.color_intensity.min, 
-                    Math.min(parameters.color_intensity.max, parameters.color_intensity.value));
-            }
-            
-            // Overall volume affects fly speed
-            if (baseParameterValues.fly_speed !== undefined) {
-                const baseSpeed = baseParameterValues.fly_speed;
-                parameters.fly_speed.value = baseSpeed + (audioLevels.overall * 1.0);
-                parameters.fly_speed.value = Math.max(parameters.fly_speed.min, 
-                    Math.min(parameters.fly_speed.max, parameters.fly_speed.value));
-            }
+            // Path effects for more dynamic movement
+            audioModifiers.path_scale = 1.0 + (audioLevels.overall * 0.4);
         }
 
         async function toggleMicrophone() {
@@ -1614,44 +1617,44 @@
             try {
                 const deltaTime = 1.0 / 60.0;
 
-                // Apply audio reactivity before updating time accumulation
-                if (audioReactive && audioPlaying) {
-                    applyAudioReactivity();
-                }
+                // Apply audio reactivity to update modifiers
+                applyAudioReactivity();
 
                 if (!animationPaused) {
-                    timeAccumulation.camera_position += parameters.fly_speed.value * deltaTime;
-                    timeAccumulation.rotation_time += parameters.rotation_speed.value * deltaTime;
-                    timeAccumulation.plane_rotation_time += parameters.plane_rotation_speed.value * deltaTime;
-                    timeAccumulation.color_time += parameters.color_speed.value * deltaTime;
+                    timeAccumulation.camera_position += parameters.fly_speed.value * audioModifiers.fly_speed * deltaTime;
+                    timeAccumulation.rotation_time += parameters.rotation_speed.value * audioModifiers.rotation_speed * deltaTime;
+                    timeAccumulation.plane_rotation_time += parameters.plane_rotation_speed.value * audioModifiers.plane_rotation_speed * deltaTime;
+                    timeAccumulation.color_time += parameters.color_speed.value * audioModifiers.color_speed * deltaTime;
                 }
 
                 gl.viewport(0, 0, canvas.width, canvas.height);
                 gl.useProgram(program);
                 
-                // Set all uniforms
+                // Set all uniforms using base parameters multiplied by audio modifiers
                 gl.uniform2f(uniforms.u_resolution, canvas.width, canvas.height);
                 gl.uniform1f(uniforms.u_time, performance.now() * 0.001);
                 gl.uniform1f(uniforms.u_camera_position, timeAccumulation.camera_position);
                 gl.uniform1f(uniforms.u_rotation_time, timeAccumulation.rotation_time);
                 gl.uniform1f(uniforms.u_plane_rotation_time, timeAccumulation.plane_rotation_time);
                 gl.uniform1f(uniforms.u_color_time, timeAccumulation.color_time);
-                gl.uniform1f(uniforms.u_fly_speed, parameters.fly_speed.value);
-                gl.uniform1f(uniforms.u_contrast, parameters.contrast.value);
-                gl.uniform1f(uniforms.u_kaleidoscope_segments, parameters.kaleidoscope_segments.value);
-                gl.uniform1f(uniforms.u_layer_count, parameters.layer_count.value);
-                gl.uniform1f(uniforms.u_truchet_radius, parameters.truchet_radius.value);
-                gl.uniform1f(uniforms.u_center_fill_radius, parameters.center_fill_radius.value);
-                gl.uniform1f(uniforms.u_rotation_speed, parameters.rotation_speed.value);
-                gl.uniform1f(uniforms.u_plane_rotation_speed, parameters.plane_rotation_speed.value);
-                gl.uniform1f(uniforms.u_zoom_level, parameters.zoom_level.value);
-                gl.uniform1f(uniforms.u_color_intensity, parameters.color_intensity.value);
-                gl.uniform1f(uniforms.u_camera_tilt_x, parameters.camera_tilt_x.value);
-                gl.uniform1f(uniforms.u_camera_tilt_y, parameters.camera_tilt_y.value);
-                gl.uniform1f(uniforms.u_camera_roll, parameters.camera_roll.value);
-                gl.uniform1f(uniforms.u_path_stability, parameters.path_stability.value);
-                gl.uniform1f(uniforms.u_path_scale, parameters.path_scale.value);
-                gl.uniform1f(uniforms.u_color_speed, parameters.color_speed.value);
+                
+                // Apply audio modifiers to parameters
+                gl.uniform1f(uniforms.u_fly_speed, parameters.fly_speed.value * audioModifiers.fly_speed);
+                gl.uniform1f(uniforms.u_contrast, parameters.contrast.value * audioModifiers.contrast);
+                gl.uniform1f(uniforms.u_kaleidoscope_segments, parameters.kaleidoscope_segments.value * audioModifiers.kaleidoscope_segments);
+                gl.uniform1f(uniforms.u_layer_count, Math.max(1, Math.min(10, parameters.layer_count.value * audioModifiers.layer_count)));
+                gl.uniform1f(uniforms.u_truchet_radius, parameters.truchet_radius.value * audioModifiers.truchet_radius);
+                gl.uniform1f(uniforms.u_center_fill_radius, parameters.center_fill_radius.value * audioModifiers.center_fill_radius);
+                gl.uniform1f(uniforms.u_rotation_speed, parameters.rotation_speed.value * audioModifiers.rotation_speed);
+                gl.uniform1f(uniforms.u_plane_rotation_speed, parameters.plane_rotation_speed.value * audioModifiers.plane_rotation_speed);
+                gl.uniform1f(uniforms.u_zoom_level, parameters.zoom_level.value * audioModifiers.zoom_level);
+                gl.uniform1f(uniforms.u_color_intensity, parameters.color_intensity.value * audioModifiers.color_intensity);
+                gl.uniform1f(uniforms.u_camera_tilt_x, parameters.camera_tilt_x.value * audioModifiers.camera_tilt_x);
+                gl.uniform1f(uniforms.u_camera_tilt_y, parameters.camera_tilt_y.value * audioModifiers.camera_tilt_y);
+                gl.uniform1f(uniforms.u_camera_roll, parameters.camera_roll.value * audioModifiers.camera_roll);
+                gl.uniform1f(uniforms.u_path_stability, parameters.path_stability.value * audioModifiers.path_stability);
+                gl.uniform1f(uniforms.u_path_scale, parameters.path_scale.value * audioModifiers.path_scale);
+                gl.uniform1f(uniforms.u_color_speed, parameters.color_speed.value * audioModifiers.color_speed);
                 gl.uniform1f(uniforms.u_use_color_palette, useColorPalette ? 1.0 : 0.0);
                 gl.uniform1f(uniforms.u_invert_colors, invertColors ? 1.0 : 0.0);
                 

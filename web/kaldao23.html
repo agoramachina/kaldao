@@ -5,14 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kaldao Fractal Visualizer</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * { 
+            margin: 0; 
+            padding: 0; 
+            box-sizing: border-box; 
+        }
+        
         body { 
             background: #000; 
             color: #fff; 
             font-family: 'Courier New', monospace; 
             overflow: hidden; 
         }
-        #canvas { display: block; }
+        
+        #canvas { 
+            display: block; 
+        }
         
         .ui { 
             position: absolute; 
@@ -52,10 +60,20 @@
             z-index: 1000; 
         }
         
-        .menu h2 { color: #4CAF50; margin-bottom: 20px; text-align: center; }
-        .hidden { opacity: 0; pointer-events: none; }
+        .menu h2 { 
+            color: #4CAF50; 
+            margin-bottom: 20px; 
+            text-align: center; 
+        }
+        
+        .hidden { 
+            opacity: 0; 
+            pointer-events: none; 
+        }
+        
         .error { color: #ff4444; }
         .success { color: #44ff44; }
+        .info { color: #ffffff; }
     </style>
 </head>
 <body>
@@ -84,18 +102,18 @@
         M Toggle microphone<br>
         Ctrl+Z Undo<br>
         Ctrl+Y Redo<br>
-        ESC Toggle all parameters<br>
+        ESC Toggle menu<br>
     </div>
 
     <div class="menu hidden" id="menu">
         <div style="display: flex; gap: 20px; width: 100%;">
             <div style="flex: 1; min-width: 300px;">
-                <h2 style="color: #4CAF50; margin-bottom: 15px; font-size: 18px;">📊 All Parameters</h2>
+                <h2>📊 All Parameters</h2>
                 <div id="allParametersList" style="font-family: monospace; font-size: 12px; line-height: 1.3;"></div>
             </div>
             
             <div style="flex: 1; min-width: 300px;">
-                <h2 style="color: #FFC107; margin-bottom: 15px; font-size: 18px;">🎨 Color & Audio</h2>
+                <h2 style="color: #FFC107;">🎨 Color & Audio</h2>
                 
                 <div style="margin-bottom: 15px;">
                     <h3 style="color: #FFC107; margin-bottom: 8px; font-size: 14px;">Color Palettes</h3>
@@ -105,19 +123,6 @@
                 <div style="margin-bottom: 15px;">
                     <h3 style="color: #FFC107; margin-bottom: 8px; font-size: 14px;">Audio Status</h3>
                     <div id="allAudioStatus" style="font-family: monospace; font-size: 12px; line-height: 1.3;"></div>
-                </div>
-                
-                <div>
-                    <h3 style="color: #FFC107; margin-bottom: 8px; font-size: 14px;">Quick Controls</h3>
-                    <div style="font-size: 11px; line-height: 1.2;">
-                        <strong>Navigation:</strong> ↑/↓ switch • ←/→ adjust<br>
-                        <strong>Randomize:</strong> C colors • . parameters<br>
-                        <strong>Reset:</strong> R current • Shift+R all<br>
-                        <strong>Audio:</strong> A upload • M microphone<br>
-                        <strong>Files:</strong> S save • L load<br>
-                        <strong>Undo:</strong> Ctrl+Z/Y • Space pause<br>
-                        <strong>Colors:</strong> I invert • Shift+C reset<br>
-                    </div>
                 </div>
             </div>
         </div>
@@ -129,7 +134,7 @@
 
     <script>
         // ===== GLOBAL VARIABLES =====
-        let gl, canvas, program;
+        let gl, canvas, program, uniforms = {};
         let animationPaused = false;
         let currentParameterIndex = 0;
         let currentPaletteIndex = 0;
@@ -137,29 +142,10 @@
         let invertColors = false;
         let menuVisible = false;
         
-        // State management
-        let stateLoaded = false;
-        let autoSaveTimeout = null;
-        const AUTO_SAVE_DELAY = 2000;
-        
         // Controls auto-fade
         let controlsVisible = true;
         let controlsFadeTimeout = null;
         const CONTROLS_FADE_DELAY = 3000;
-        
-        // Mobile detection and touch handling
-        let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        let touchStartTime = 0;
-        let touchStartX = 0;
-        let touchStartY = 0;
-        let isLongPress = false;
-        let isDragging = false;
-        let lastTouchTime = 0;
-        
-        // Shake detection
-        let lastAcceleration = { x: 0, y: 0, z: 0 };
-        let shakeThreshold = 25;
-        let shakeTimeout = null;
         
         // Audio system
         let audioContext = null;
@@ -169,7 +155,6 @@
         let audioElement = null;
         let audioReactive = false;
         let audioPlaying = false;
-        let baseParameterValues = {};
         
         // Audio modifiers
         let audioModifiers = {
@@ -210,7 +195,6 @@
             color_speed: { value: 0.5, min: 0.0, max: 2.0, step: 0.1, name: "Color Speed" }
         };
 
-        // Time accumulation
         const timeAccumulation = {
             camera_position: 0.0,
             rotation_time: 0.0,
@@ -218,7 +202,6 @@
             color_time: 0.0
         };
 
-        // Color palettes
         const colorPalettes = [
             { name: "B&W", a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [1.0, 1.0, 1.0], d: [0.0, 0.0, 0.0] },
             { name: "Rainbow", a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [1.0, 1.0, 1.0], d: [0.0, 0.33, 0.67] },
@@ -229,7 +212,6 @@
             { name: "Sunset", a: [0.7, 0.3, 0.2], b: [0.3, 0.2, 0.1], c: [1.5, 1.0, 0.8], d: [0.0, 0.1, 0.3] }
         ];
 
-        // Parameter keys in display order
         const parameterKeys = [
             'fly_speed', 'rotation_speed', 'plane_rotation_speed', 'zoom_level',
             'kaleidoscope_segments', 'truchet_radius', 'center_fill_radius', 'layer_count', 'contrast', 'color_intensity',
@@ -365,7 +347,7 @@
                 vec2 hp = p;
                 vec2 hpp = toPolar(hp);
                 
-                float evenRep = floor(rep * 0.5 + 0.5) * 2.0;
+                float evenRep = floor(rep * 0.5) * 2.0;
                 evenRep = max(evenRep, 4.0);
                 
                 float rn = modMirror1(hpp.y, 2.0 * PI / evenRep);
@@ -595,8 +577,6 @@
             }
         `;
 
-        let uniforms = {};
-
         // ===== INITIALIZATION =====
         function init() {
             try {
@@ -614,6 +594,7 @@
                 
                 updateStatus('✅ Kaldao loaded successfully!', 'success');
                 updateDisplay();
+                showControls();
                 render();
                 
             } catch (error) {
@@ -684,19 +665,127 @@
             });
         }
 
+        // ===== CONTROLS =====
+        function showControls() {
+            const controls = document.getElementById('controls');
+            if (controls && !menuVisible) {
+                controls.classList.remove('hidden');
+                document.getElementById('ui').classList.remove('hidden');
+                controlsVisible = true;
+                
+                if (controlsFadeTimeout) {
+                    clearTimeout(controlsFadeTimeout);
+                }
+                
+                controlsFadeTimeout = setTimeout(() => {
+                    hideControls();
+                }, CONTROLS_FADE_DELAY);
+            }
+        }
+        
+        function hideControls() {
+            const controls = document.getElementById('controls');
+            if (controls && !menuVisible) {
+                controls.classList.add('hidden');
+                controlsVisible = false;
+                document.getElementById('ui').classList.add('hidden');
+            }
+        }
+        
+        function resetControlsFadeTimer() {
+            if (!menuVisible) {
+                showControls();
+            }
+        }
+
         function setupControls() {
             document.addEventListener('keydown', (e) => {
-                switch(e.code) {
-                    case 'ArrowUp': e.preventDefault(); switchParameter(-1); break;
-                    case 'ArrowDown': e.preventDefault(); switchParameter(1); break;
-                    case 'ArrowLeft': e.preventDefault(); adjustParameter(-1); break;
-                    case 'ArrowRight': e.preventDefault(); adjustParameter(1); break;
-                    case 'Space': e.preventDefault(); animationPaused = !animationPaused; break;
-                    case 'KeyC': e.preventDefault(); randomizeColors(); break;
-                    case 'KeyR': e.preventDefault(); resetCurrentParameter(); break;
-                    case 'Period': e.preventDefault(); randomizeParameters(); break;
-                    case 'KeyI': e.preventDefault(); toggleInvertColors(); break;
-                    case 'Escape': e.preventDefault(); toggleMenu(); break;
+                try {
+                    resetControlsFadeTimer();
+                    
+                    switch(e.code) {
+                        case 'ArrowUp':
+                            e.preventDefault();
+                            switchParameter(-1);
+                            break;
+                        case 'ArrowDown':
+                            e.preventDefault();
+                            switchParameter(1);
+                            break;
+                        case 'ArrowLeft':
+                            e.preventDefault();
+                            adjustParameter(-1);
+                            break;
+                        case 'ArrowRight':
+                            e.preventDefault();
+                            adjustParameter(1);
+                            break;
+                        case 'Space':
+                            e.preventDefault();
+                            animationPaused = !animationPaused;
+                            updateStatus(`Animation: ${animationPaused ? 'PAUSED' : 'RUNNING'}`, 'info');
+                            break;
+                        case 'KeyC':
+                            e.preventDefault();
+                            if (e.shiftKey) {
+                                resetToBlackWhite();
+                            } else {
+                                randomizeColors();
+                            }
+                            break;
+                        case 'KeyR':
+                            e.preventDefault();
+                            if (e.shiftKey) {
+                                if (confirm('Reset all parameters?')) {
+                                    resetAllParameters();
+                                }
+                            } else {
+                                resetCurrentParameter();
+                            }
+                            break;
+                        case 'Period':
+                            e.preventDefault();
+                            randomizeParameters();
+                            break;
+                        case 'KeyI':
+                            e.preventDefault();
+                            toggleInvertColors();
+                            break;
+                        case 'KeyS':
+                            e.preventDefault();
+                            saveParameters();
+                            break;
+                        case 'KeyL':
+                            e.preventDefault();
+                            loadParameters();
+                            break;
+                        case 'Escape':
+                            e.preventDefault();
+                            toggleMenu();
+                            break;
+                        case 'KeyA':
+                            e.preventDefault();
+                            toggleAudio();
+                            break;
+                        case 'KeyZ':
+                            e.preventDefault();
+                            if (e.ctrlKey || e.metaKey) {
+                                undo();
+                            }
+                            break;
+                        case 'KeyY':
+                            e.preventDefault();
+                            if (e.ctrlKey || e.metaKey) {
+                                redo();
+                            }
+                            break;
+                        case 'KeyM':
+                            e.preventDefault();
+                            toggleMicrophone();
+                            break;
+                    }
+                } catch (error) {
+                    updateStatus(`Input error: ${error.message}`, 'error');
                 }
             });
 
@@ -709,6 +798,7 @@
             });
         }
 
+        // ===== UI FUNCTIONS =====
         function updateStatus(message, type = 'info') {
             const statusDiv = document.getElementById('status');
             if (statusDiv) {
@@ -724,14 +814,24 @@
             
             const paramDiv = document.getElementById('currentParam');
             if (paramDiv) {
-                paramDiv.textContent = `${param.name}: ${param.value.toFixed(3)} | ${palette.name}`;
+                paramDiv.textContent = `${param.name}: ${param.value.toFixed(3)} | ${palette.name}${invertColors ? ' (Inverted)' : ''}`;
             }
+            
+            updateMenuDisplay();
         }
 
         function adjustParameter(delta) {
+            saveStateForUndo();
+            
             const paramKey = parameterKeys[currentParameterIndex];
             const param = parameters[paramKey];
+            
             param.value = Math.max(param.min, Math.min(param.max, param.value + delta * param.step));
+            
+            if (paramKey === 'kaleidoscope_segments') {
+                param.value = Math.round(param.value / 2) * 2;
+            }
+            
             updateDisplay();
         }
 
@@ -741,6 +841,8 @@
         }
 
         function randomizeColors() {
+            saveStateForUndo();
+            
             const palette = colorPalettes[currentPaletteIndex];
             for (let i = 0; i < 3; i++) {
                 palette.a[i] = Math.random();
@@ -748,27 +850,55 @@
                 palette.c[i] = Math.random() * 2.0;
                 palette.d[i] = Math.random();
             }
+            
             if (currentPaletteIndex === 0) {
                 currentPaletteIndex = 1;
                 useColorPalette = true;
             }
+            
+            updateDisplay();
+        }
+
+        function resetToBlackWhite() {
+            saveStateForUndo();
+            currentPaletteIndex = 0;
+            useColorPalette = false;
+            invertColors = false;
             updateDisplay();
         }
 
         function toggleInvertColors() {
+            saveStateForUndo();
             invertColors = !invertColors;
             updateDisplay();
         }
 
         function randomizeParameters() {
+            saveStateForUndo();
+            
             Object.keys(parameters).forEach(key => {
+                if (key === 'color_intensity' || key === 'color_speed') return;
+                
                 const param = parameters[key];
                 param.value = Math.random() * (param.max - param.min) + param.min;
+                param.value = Math.round(param.value / param.step) * param.step;
+                
+                if (key === 'kaleidoscope_segments') {
+                    param.value = Math.round(param.value / 2) * 2;
+                }
+                
+                param.value = Math.max(param.min, Math.min(param.max, param.value));
             });
+            
             updateDisplay();
         }
 
         function resetCurrentParameter() {
+            saveStateForUndo();
+            
+            const paramKey = parameterKeys[currentParameterIndex];
+            const param = parameters[paramKey];
+            
             const defaults = {
                 fly_speed: 0.25, contrast: 1.0, kaleidoscope_segments: 10.0,
                 truchet_radius: 0.35, center_fill_radius: 0.0, layer_count: 6,
@@ -777,48 +907,152 @@
                 camera_roll: 0.0, path_stability: 1.0, path_scale: 1.0, color_speed: 0.5
             };
             
-            const paramKey = parameterKeys[currentParameterIndex];
             if (defaults[paramKey] !== undefined) {
-                parameters[paramKey].value = defaults[paramKey];
+                param.value = defaults[paramKey];
             }
+            
             updateDisplay();
         }
 
+        function resetAllParameters() {
+            saveStateForUndo();
+            
+            Object.keys(parameters).forEach(key => {
+                const defaults = {
+                    fly_speed: 0.25, contrast: 1.0, kaleidoscope_segments: 10.0,
+                    truchet_radius: 0.35, center_fill_radius: 0.0, layer_count: 6,
+                    rotation_speed: 0.025, zoom_level: 0.3, color_intensity: 1.0,
+                    plane_rotation_speed: 0.5, camera_tilt_x: 0.0, camera_tilt_y: 0.0,
+                    camera_roll: 0.0, path_stability: 1.0, path_scale: 1.0, color_speed: 0.5
+                };
+                
+                if (defaults[key] !== undefined) {
+                    parameters[key].value = defaults[key];
+                }
+            });
+            
+            currentPaletteIndex = 0;
+            useColorPalette = false;
+            invertColors = false;
+            
+            updateDisplay();
+            updateMenuDisplay();
+        }
+
+        // ===== MENU SYSTEM =====
         function toggleMenu() {
             menuVisible = !menuVisible;
             const menu = document.getElementById('menu');
+            const ui = document.getElementById('ui');
+            const controls = document.getElementById('controls');
+            
             if (menuVisible) {
                 menu.classList.remove('hidden');
+                ui.classList.add('hidden');
+                controls.classList.add('hidden');
                 updateMenuDisplay();
             } else {
                 menu.classList.add('hidden');
+                ui.classList.remove('hidden');
+                controls.classList.remove('hidden');
             }
         }
 
         function updateMenuDisplay() {
+            if (!menuVisible) return;
+            
             const allParamsList = document.getElementById('allParametersList');
             if (allParamsList) {
-                let html = '';
-                parameterKeys.forEach(key => {
+                let paramsHTML = '';
+                
+                paramsHTML += '<div style="color: #4CAF50; font-weight: bold; margin-bottom: 5px;">MOVEMENT & ANIMATION</div>';
+                const movementParams = ['fly_speed', 'rotation_speed', 'plane_rotation_speed', 'zoom_level'];
+                movementParams.forEach(key => {
                     const param = parameters[key];
-                    const isCurrent = key === parameterKeys[currentParameterIndex];
+                    const index = parameterKeys.indexOf(key);
+                    const isCurrent = index === currentParameterIndex;
                     const style = isCurrent ? 'color: #4CAF50; font-weight: bold;' : 'color: #ffffff;';
-                    html += `<div style="${style}">${param.name}: ${param.value.toFixed(3)}</div>`;
+                    paramsHTML += `<div style="${style}">${param.name}: ${param.value.toFixed(3)}</div>`;
                 });
-                allParamsList.innerHTML = html;
+                
+                paramsHTML += '<br>';
+                
+                paramsHTML += '<div style="color: #FFC107; font-weight: bold; margin-bottom: 5px;">PATTERN & VISUAL</div>';
+                const patternParams = ['kaleidoscope_segments', 'truchet_radius', 'center_fill_radius', 'layer_count', 'contrast', 'color_intensity'];
+                patternParams.forEach(key => {
+                    const param = parameters[key];
+                    const index = parameterKeys.indexOf(key);
+                    const isCurrent = index === currentParameterIndex;
+                    const style = isCurrent ? 'color: #4CAF50; font-weight: bold;' : 'color: #ffffff;';
+                    const value = key === 'kaleidoscope_segments' || key === 'layer_count' ? 
+                        param.value.toFixed(0) : param.value.toFixed(3);
+                    paramsHTML += `<div style="${style}">${param.name}: ${value}</div>`;
+                });
+                
+                paramsHTML += '<br>';
+                
+                paramsHTML += '<div style="color: #9C27B0; font-weight: bold; margin-bottom: 5px;">CAMERA & PATH</div>';
+                const cameraParams = ['camera_tilt_x', 'camera_tilt_y', 'camera_roll', 'path_stability', 'path_scale'];
+                cameraParams.forEach(key => {
+                    const param = parameters[key];
+                    const index = parameterKeys.indexOf(key);
+                    const isCurrent = index === currentParameterIndex;
+                    const style = isCurrent ? 'color: #4CAF50; font-weight: bold;' : 'color: #ffffff;';
+                    paramsHTML += `<div style="${style}">${param.name}: ${param.value.toFixed(3)}</div>`;
+                });
+                
+                paramsHTML += '<br>';
+                
+                paramsHTML += '<div style="color: #FF5722; font-weight: bold; margin-bottom: 5px;">COLOR & SPEED</div>';
+                const colorParams = ['color_speed'];
+                colorParams.forEach(key => {
+                    const param = parameters[key];
+                    const index = parameterKeys.indexOf(key);
+                    const isCurrent = index === currentParameterIndex;
+                    const style = isCurrent ? 'color: #4CAF50; font-weight: bold;' : 'color: #ffffff;';
+                    paramsHTML += `<div style="${style}">${param.name}: ${param.value.toFixed(3)}</div>`;
+                });
+                
+                allParamsList.innerHTML = paramsHTML;
+            }
+            
+            const allPalettesList = document.getElementById('allPalettesList');
+            if (allPalettesList) {
+                let palettesHTML = '';
+                colorPalettes.forEach((palette, index) => {
+                    const isCurrent = index === currentPaletteIndex;
+                    const style = isCurrent ? 'color: #4CAF50; font-weight: bold;' : 'color: #ffffff;';
+                    const inverted = isCurrent && invertColors ? ' (Inverted)' : '';
+                    const active = isCurrent && useColorPalette ? ' ●' : (isCurrent ? ' ○' : '');
+                    palettesHTML += `<div style="${style}">${palette.name}${inverted}${active}</div>`;
+                });
+                allPalettesList.innerHTML = palettesHTML;
+            }
+            
+            const allAudioStatus = document.getElementById('allAudioStatus');
+            if (allAudioStatus) {
+                if (microphoneActive) {
+                    allAudioStatus.innerHTML = '🎤 <span style="color: #4CAF50;">Microphone Active</span><br>🔊 Audio Reactive: ON<br><em>Press M to stop</em>';
+                } else if (!audioElement) {
+                    allAudioStatus.innerHTML = '🎵 No audio file loaded<br>🎤 Microphone: OFF<br>🔊 Audio Reactive: OFF<br><em>Press A for file, M for mic</em>';
+                } else {
+                    const playStatus = audioPlaying ? '<span style="color: #4CAF50;">Playing</span>' : '<span style="color: #FF9800;">Paused</span>';
+                    const reactiveStatus = audioReactive ? '<span style="color: #4CAF50;">ON</span>' : '<span style="color: #FF9800;">OFF</span>';
+                    allAudioStatus.innerHTML = `🎵 File: ${playStatus}<br>🎤 Microphone: OFF<br>🔊 Audio Reactive: ${reactiveStatus}<br><em>Press A to toggle, M for mic</em>`;
+                }
             }
         }
 
+        // ===== STUB FUNCTIONS =====
         function saveStateForUndo() {}
-        function scheduleAutoSave() {}
-        function loadStateFromStorage() {}
-        function toggleAudio() {}
-        function toggleMicrophone() {}
-        function saveParameters() {}
-        function loadParameters() {}
         function undo() {}
         function redo() {}
+        function saveParameters() {}
+        function loadParameters() {}
+        function toggleAudio() {}
+        function toggleMicrophone() {}
 
+        // ===== RENDER LOOP =====
         function render() {
             try {
                 const deltaTime = 1.0 / 60.0;
@@ -873,6 +1107,7 @@
             }
         }
 
+        // Initialize when page loads
         window.addEventListener('load', init);
     </script>
 </body>
