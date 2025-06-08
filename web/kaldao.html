@@ -940,6 +940,32 @@ MIT License
                 }
             });
 
+            // Mouse wheel controls for zoom
+            document.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                
+                try {
+                    resetControlsFadeTimer();
+                    
+                    // Calculate zoom adjustment based on wheel direction
+                    const wheelDelta = e.deltaY > 0 ? -1 : 1; // Invert: wheel up = zoom in
+                    const sensitivity = 3; // Adjust sensitivity (higher = more sensitive)
+                    const zoomAdjustment = wheelDelta * sensitivity * parameters.zoom_level.step;
+                    
+                    // Apply zoom adjustment
+                    let newZoom = parameters.zoom_level.value + zoomAdjustment;
+                    
+                    // Clamp to zoom bounds
+                    newZoom = Math.max(parameters.zoom_level.min, Math.min(parameters.zoom_level.max, newZoom));
+                    newZoom = Math.round(newZoom / parameters.zoom_level.step) * parameters.zoom_level.step;
+                    
+                    parameters.zoom_level.value = newZoom;
+                    updateDisplay();
+                } catch (error) {
+                    updateStatus(`Wheel zoom error: ${error.message}`, 'error');
+                }
+            }, { passive: false });
+
             // Mobile touch controls
             if (isMobile) {
                 setupMobileControls();

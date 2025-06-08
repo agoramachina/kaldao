@@ -60,6 +60,10 @@
             margin: 10px 0;
             border-radius: 4px;
         }
+
+        .hidden {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
@@ -71,12 +75,13 @@
         <div id="errors"></div>
     </div>
 
-    <div class="controls">
-        <strong>TEST CONTROLS</strong><br>
+    <div class="controls" id="controls">
+        <strong>CONTROLS</strong><br>
         Arrow Keys: Adjust parameters<br>
         Space: Pause<br>
         C: Change colors<br>
         R: Reset<br>
+        ESC/Tap: Toggle UI<br>
     </div>
 
     <script>
@@ -322,6 +327,7 @@
             let currentPaletteIndex = 0;
             let useColorPalette = false;
             let animationPaused = false;
+            let uiVisible = true;
             
             const parameterKeys = Object.keys(parameters);
 
@@ -379,6 +385,20 @@
                 updateDisplay();
             }
 
+            function toggleUI() {
+                uiVisible = !uiVisible;
+                const debugInfo = document.getElementById('debugInfo');
+                const controls = document.getElementById('controls');
+                
+                if (uiVisible) {
+                    debugInfo.classList.remove('hidden');
+                    controls.classList.remove('hidden');
+                } else {
+                    debugInfo.classList.add('hidden');
+                    controls.classList.add('hidden');
+                }
+            }
+
             // Step 6: Test input handling
             document.addEventListener('keydown', function(e) {
                 try {
@@ -412,6 +432,10 @@
                             e.preventDefault();
                             resetCurrentParameter();
                             break;
+                        case 'Escape':
+                            e.preventDefault();
+                            toggleUI();
+                            break;
                     }
                 } catch (error) {
                     updateStatus(`Input error: ${error.message}`, 'error');
@@ -419,6 +443,12 @@
             });
 
             updateStatus("Step 7: Input handling setup", 'success');
+
+            // Mobile tap handling
+            document.addEventListener('touchend', function(e) {
+                e.preventDefault();
+                toggleUI();
+            });
 
             // Step 7: Render loop
             let startTime = performance.now();
